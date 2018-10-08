@@ -8,6 +8,7 @@ class QTcpServer;
 class QTextEdit;
 class QTcpSocket;
 class QFile;
+class QLineEdit;
 
 class MyServer : public QWidget {
 Q_OBJECT
@@ -15,6 +16,7 @@ private:
     QTcpServer* m_ptcpServer;
     QTcpSocket* pClientSocket;
     QTextEdit*  m_ptxt;
+    QLineEdit*  m_ptxtPort;
     quint16     m_nNextBlockSize;
     int         countClients = 0;
     int         curClientId  = 100500;
@@ -39,11 +41,12 @@ private:
     void sendToClient(MsgType type, QList<QVariant> args = QList<QVariant>());
 
 public:
-    MyServer(int nPort, QWidget* pwgt = 0);
+    MyServer(QWidget* pwgt = 0);
 
 public slots:
     virtual void slotNewConnection();
             void slotReadClient();
             void hDisconnected();
+            void slotListen();
 };
 

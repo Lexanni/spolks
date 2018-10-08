@@ -19,6 +19,8 @@ private:
     QTcpSocket* m_pTcpSocket;
     QTextEdit*  m_ptxtInfo;
     QLineEdit*  m_ptxtInput;
+    QLineEdit*  m_ptxtIp;
+    QLineEdit*  m_ptxtPort;
     quint16     m_nNextBlockSize;
     qint32      id = 0;
     qint64      fileSize;
@@ -47,7 +49,7 @@ private:
 
 
 public:
-    MyClient(const QString& strHost, int nPort, QWidget* pwgt = 0) ;
+    MyClient(QWidget* pwgt = 0) ;
 
 signals:
     void downloadBegin();
@@ -59,4 +61,5 @@ private slots:
     void slotSendToServer(MsgType type, QList<QVariant> args = QList<QVariant>());
     void parseInput();
     void slotConnected();
+    void slotConnectToHost();
 };

@@ -4,29 +4,30 @@
 #include "MyServer.h"
 
 // ----------------------------------------------------------------------
-MyServer::MyServer(int nPort, QWidget* pwgt /*=0*/) : QWidget(pwgt)
+MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
                                                     , m_nNextBlockSize(0)
 {
     m_ptcpServer = new QTcpServer(this); 
-    if (!m_ptcpServer->listen(QHostAddress::Any, nPort)) {
-        QMessageBox::critical(0, 
-                              "Server Error", 
-                              "Unable to start the server:" 
-                              + m_ptcpServer->errorString()
-                             );
-        m_ptcpServer->close();
-        return;
-    }
     connect(m_ptcpServer, SIGNAL(newConnection()), 
             this,         SLOT(slotNewConnection())
            );
 
     m_ptxt = new QTextEdit;
     m_ptxt->setReadOnly(true);
+    m_ptxtPort = new QLineEdit("2323");
+    QPushButton * bListen = new QPushButton("Listen");
+
+    connect(bListen, SIGNAL(clicked()), this, SLOT(slotListen()));
+
+    QHBoxLayout * portLayout = new QHBoxLayout();
+    portLayout->addWidget(new QLabel("Port: "));
+    portLayout->addWidget(m_ptxtPort);
+    portLayout->addWidget(bListen);
 
     //Layout setup
     QVBoxLayout* pvbxLayout = new QVBoxLayout;    
     pvbxLayout->addWidget(new QLabel("<H1>Server</H1>"));
+    pvbxLayout->addLayout(portLayout);
     pvbxLayout->addWidget(m_ptxt);
     setLayout(pvbxLayout);
 }
@@ -125,7 +126,7 @@ void MyServer::slotReadClient()
             break;
          case MsgType::DataRequest :
             {
-               qDebug () << "Reciver DataRequest" << endl;
+//               qDebug () << "Reciver DataRequest" << endl;
                in >> s;
                qint64 offset;
                qint64 blockSize;
@@ -203,6 +204,24 @@ void MyServer::hDisconnected()
     if(sender() == pClientSocket){
         qDebug () << "hDisconnected()" << endl;
         countClients--;
-        pClientSocket->deleteLater();
+        pClientSocket->disconnectFromHost();
     }
+}
+
+void MyServer::slotListen()
+{
+    int nPort = m_ptxtPort->text().toInt();
+    if (!m_ptcpServer->listen(QHostAddress::Any, nPort)) {
+        QMessageBox::critical(0,
+                              "Server Error",
+                              "Unable to start the server:"
+                              + m_ptcpServer->errorString()
+                             );
+        m_ptcpServer->close();
+        return;
+    }
+    m_ptxtPort->setEnabled(false);
+    QPushButton * pButton = (QPushButton * )sender();
+    pButton->setEnabled(false);
+    m_ptxt->append("Listening port " + m_ptxtPort->text());
 }

@@ -5,20 +5,11 @@
 #include "MyClient.h"
 
 // ----------------------------------------------------------------------
-MyClient::MyClient(const QString& strHost, 
-                   int            nPort, 
-                   QWidget*       pwgt /*=0*/
+MyClient::MyClient(QWidget*       pwgt /*=0*/
                   ) : QWidget(pwgt)
                     , m_nNextBlockSize(0)
 {
     m_pTcpSocket = new QTcpSocket(this);
-
-    m_pTcpSocket->connectToHost(strHost, nPort);
-    connect(m_pTcpSocket, SIGNAL(connected()), SLOT(slotConnected()));
-    connect(m_pTcpSocket, SIGNAL(readyRead()), SLOT(slotReadyRead()));
-    connect(m_pTcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-            this,         SLOT(slotError(QAbstractSocket::SocketError))
-           );
 
     m_ptxtInfo  = new QTextEdit;
     m_ptxtInput = new QLineEdit;
@@ -37,9 +28,23 @@ MyClient::MyClient(const QString& strHost,
     progressBar->setMinimum(0);
     progressBar->setValue(0);
 
+    m_ptxtIp   = new QLineEdit("localhost");
+    m_ptxtPort = new QLineEdit("2323");
+    QPushButton* bConnect = new QPushButton("Connect");
+
+    connect(bConnect, SIGNAL(clicked()), this, SLOT(slotConnectToHost()));
+
+    QHBoxLayout* addressLayout = new QHBoxLayout();
+    addressLayout->addWidget(new QLabel("IP: "));
+    addressLayout->addWidget(m_ptxtIp);
+    addressLayout->addWidget(new QLabel("Port: "));
+    addressLayout->addWidget(m_ptxtPort);
+    addressLayout->addWidget(bConnect);
+
     //Layout setup
-    QVBoxLayout* pvbxLayout = new QVBoxLayout;    
+    QVBoxLayout* pvbxLayout = new QVBoxLayout;
     pvbxLayout->addWidget(new QLabel("<H1>Client</H1>"));
+    pvbxLayout->addLayout(addressLayout);
     pvbxLayout->addWidget(m_ptxtInfo);
     pvbxLayout->addWidget(labelSpeed);
     pvbxLayout->addWidget(progressBar);
@@ -138,8 +143,10 @@ void MyClient::slotReadyRead()
 
                     break;
                 }
-                slotSendToServer(MsgType::DataRequest, {fileName, buffer.size(), qMin(fileSize - buffer.size(), blockSize)});
-
+                slotSendToServer(MsgType::DataRequest, {fileName,
+                                                        buffer.size(),
+                                                        qMin(fileSize - buffer.size(),
+                                                        blockSize)});
             }
             break;
         default:
@@ -232,6 +239,19 @@ void MyClient::slotConnected()
 {
     m_ptxtInfo->append("Received the connected() signal");
     slotSendToServer(MsgType::Sync);
-    // m_pTcpSocket->setReadBufferSize(10000);
-    // qDebug () << "Read buffer size = " << m_pTcpSocket->readBufferSize() << endl;
+}
+
+void MyClient::slotConnectToHost()
+{
+    QString strHost = m_ptxtIp->text();
+    int nPort = m_ptxtPort->text().toInt();
+    qDebug () << "strHost: " << strHost << ", port: " << nPort;
+    m_pTcpSocket->connectToHost(strHost, nPort);
+    connect(m_pTcpSocket, SIGNAL(connected()), SLOT(slotConnected()));
+    connect(m_pTcpSocket, SIGNAL(readyRead()), SLOT(slotReadyRead()));
+    connect(m_pTcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
+            this,         SLOT(slotError(QAbstractSocket::SocketError))
+           );
+    QPushButton * pButton = (QPushButton *)sender();
+    pButton->setEnabled(false);
 }
