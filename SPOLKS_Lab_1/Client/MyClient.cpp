@@ -9,10 +9,9 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
                   ) : QWidget(pwgt)
                     , m_nNextBlockSize(0)
 {
-    m_pTcpSocket = new QTcpSocket(this);
-
     m_ptxtInfo  = new QTextEdit;
     m_ptxtInput = new QLineEdit;
+    m_ptxtInput->setEnabled(false);
 
     connect(m_ptxtInput, SIGNAL(returnPressed()), 
             this,        SLOT(parseInput())
@@ -30,9 +29,12 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
 
     m_ptxtIp   = new QLineEdit("localhost");
     m_ptxtPort = new QLineEdit("2323");
-    QPushButton* bConnect = new QPushButton("Connect");
+    bConnect    = new QPushButton("Connect");
+    bDisconnect = new QPushButton("Disconnect");
+    bDisconnect->setEnabled(false);
 
     connect(bConnect, SIGNAL(clicked()), this, SLOT(slotConnectToHost()));
+    connect(bDisconnect, SIGNAL(clicked()), this, SLOT(slotDisconnectFromHost()));
 
     QHBoxLayout* addressLayout = new QHBoxLayout();
     addressLayout->addWidget(new QLabel("IP: "));
@@ -40,6 +42,8 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     addressLayout->addWidget(new QLabel("Port: "));
     addressLayout->addWidget(m_ptxtPort);
     addressLayout->addWidget(bConnect);
+    addressLayout->addWidget(bDisconnect);
+
 
     //Layout setup
     QVBoxLayout* pvbxLayout = new QVBoxLayout;
@@ -128,11 +132,11 @@ void MyClient::slotReadyRead()
                 QByteArray b;
                 in >> b;
                 bufferStream.write(b);
-                progressBar->setValue(buffer.size() * 100 / fileSize);
+                progressBar->setValue((offset + size) * 100 / fileSize);
                 if(buffer.size() == fileSize) {
                     int t = time.elapsed();
                     labelSpeed->setText("<H3>Speed: " + QString::number(fileSize/t) + " KB/s</H3>");
-                    QFile file("recive");
+                    QFile file(fileName);
                     file.open(QIODevice::WriteOnly);
                     file.write(buffer);
                     file.close();
@@ -232,6 +236,8 @@ void MyClient::parseInput()
         slotSendToServer(MsgType::Close);
     else if (cmd == "DOWNLOAD")
         slotSendToServer(MsgType::Download, args);
+    else
+        m_ptxtInfo->append("Unknown command!");
 }
 
 // ------------------------------------------------------------------
@@ -243,6 +249,7 @@ void MyClient::slotConnected()
 
 void MyClient::slotConnectToHost()
 {
+    m_pTcpSocket = new QTcpSocket(this);
     QString strHost = m_ptxtIp->text();
     int nPort = m_ptxtPort->text().toInt();
     qDebug () << "strHost: " << strHost << ", port: " << nPort;
@@ -252,6 +259,19 @@ void MyClient::slotConnectToHost()
     connect(m_pTcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
             this,         SLOT(slotError(QAbstractSocket::SocketError))
            );
-    QPushButton * pButton = (QPushButton *)sender();
-    pButton->setEnabled(false);
+    bConnect->setEnabled(false);
+    bDisconnect->setEnabled(true);
+    m_ptxtInput->setEnabled(true);
+}
+
+void MyClient::slotDisconnectFromHost()
+{
+    m_pTcpSocket->disconnectFromHost();
+    if (m_pTcpSocket->state() == QAbstractSocket::ConnectedState) {
+        m_pTcpSocket->waitForDisconnected();
+    }
+    delete m_pTcpSocket;
+    bConnect->setEnabled(true);
+    bDisconnect->setEnabled(false);
+    m_ptxtInput->setEnabled(false);
 }

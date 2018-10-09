@@ -8,6 +8,7 @@
 #include <QtMath>
 #include <QTime>
 #include <QProgressBar>
+#include <QPushButton>
 
 class QTextEdit;
 class QLineEdit;
@@ -32,6 +33,9 @@ private:
     QLabel *    labelSpeed;
     QProgressBar * progressBar;
     QTime       time;
+
+    QPushButton* bConnect;
+    QPushButton* bDisconnect;
 
 
     enum MsgType {
@@ -62,4 +66,5 @@ private slots:
     void parseInput();
     void slotConnected();
     void slotConnectToHost();
+    void slotDisconnectFromHost();
 };
