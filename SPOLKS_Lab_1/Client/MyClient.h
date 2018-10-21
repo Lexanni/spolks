@@ -17,12 +17,12 @@ class QLineEdit;
 class MyClient : public QWidget {
 Q_OBJECT
 private:
-    QTcpSocket* m_pTcpSocket;
-    QTextEdit*  m_ptxtInfo;
-    QLineEdit*  m_ptxtInput;
-    QLineEdit*  m_ptxtIp;
-    QLineEdit*  m_ptxtPort;
-    quint16     m_nNextBlockSize;
+    QTcpSocket* pTcpSocket;
+    QTextEdit*  pTxtInfo;
+    QLineEdit*  pTxtInput;
+    QLineEdit*  pTxtIp;
+    QLineEdit*  pTxtPort;
+    quint16     nextBlockSize;
     qint32      id = 0;
     qint64      fileSize;
 //    qint64      resiveBytes;
@@ -37,6 +37,8 @@ private:
     QPushButton* bConnect;
     QPushButton* bDisconnect;
 
+    QString     options_file_name = "client_options";
+
 
     enum MsgType {
         Sync,
@@ -48,12 +50,15 @@ private:
         Data,
         DataAnonce,
         DataRequest,
-        DownloadAck
+        DownloadAck,
+        Alive,
+        AckAlive
     };
 
 
 public:
-    MyClient(QWidget* pwgt = 0) ;
+    MyClient(QWidget* pwgt = 0);
+    ~MyClient();
 
 signals:
     void downloadBegin();
@@ -67,4 +72,5 @@ private slots:
     void slotConnected();
     void slotConnectToHost();
     void slotDisconnectFromHost();
+    void slotConnectionStateChanged(QAbstractSocket::SocketState state);
 };

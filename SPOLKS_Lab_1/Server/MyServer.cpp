@@ -15,14 +15,18 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
     m_ptxt = new QTextEdit;
     m_ptxt->setReadOnly(true);
     m_ptxtPort = new QLineEdit("2323");
-    QPushButton * bListen = new QPushButton("Listen");
+    bListen = new QPushButton("Listen");
+    bResume = new QPushButton("Resume");
+    bResume->setEnabled(false);
 
     connect(bListen, SIGNAL(clicked()), this, SLOT(slotListen()));
+    connect(bResume, SIGNAL(clicked()), this, SLOT(slotResume()));
 
     QHBoxLayout * portLayout = new QHBoxLayout();
     portLayout->addWidget(new QLabel("Port: "));
     portLayout->addWidget(m_ptxtPort);
     portLayout->addWidget(bListen);
+    portLayout->addWidget(bResume);
 
     //Layout setup
     QVBoxLayout* pvbxLayout = new QVBoxLayout;    
@@ -43,6 +47,8 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
         connect(pClientSocket, SIGNAL(readyRead()),
                 this,          SLOT(slotReadClient())
                );
+        connect(pClientSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
+                this,          SLOT(slotConnectionStateChanged(QAbstractSocket::SocketState)));
         countClients++;
         //sendToClient(pClientSocket, "Server Response: Connected!");
     }
@@ -85,10 +91,9 @@ void MyServer::slotReadClient()
             m_ptxt->append("Recive request Sync");
             int clientId;
             in >> clientId;
-            if(clientId != curClientId){
+            if(clientId != curClientId)
                 curClientId++;
-                sendToClient(MsgType::Sync);
-            }
+            sendToClient(MsgType::Sync);
             break;
          case MsgType::Echo :
             qDebug () << "recive request Echo" << endl;
@@ -196,13 +201,13 @@ void MyServer::sendToClient(MsgType type, QList<QVariant> args)
     out << quint16(arrBlock.size() - sizeof(quint16));
 
     pClientSocket->write(arrBlock);
-    // pClientSocket->flush();
+    pClientSocket->flush();
 }
 // ----------------------------------------------------------------------
 void MyServer::hDisconnected()
 {
     if(sender() == pClientSocket){
-        qDebug () << "hDisconnected()" << endl;
+        // qDebug () << "hDisconnected()" << endl;
         countClients--;
         pClientSocket->disconnectFromHost();
     }
@@ -221,7 +226,47 @@ void MyServer::slotListen()
         return;
     }
     m_ptxtPort->setEnabled(false);
-    QPushButton * pButton = (QPushButton * )sender();
-    pButton->setEnabled(false);
+    bListen->setEnabled(false);
+    bResume->setEnabled(true);
     m_ptxt->append("Listening port " + m_ptxtPort->text());
+}
+
+void MyServer::slotResume()
+{
+//    if (pClientSocket != nullptr) {
+//        delete pClientSocket;
+//        pClientSocket = nullptr;
+//        countClients--;
+//    }
+    m_ptcpServer->close();
+    bListen->setEnabled(true);
+    bResume->setEnabled(false);
+    m_ptxtPort->setEnabled(true);
+    m_ptxt->append("Resume port " + m_ptxtPort->text());
+}
+
+void MyServer::slotConnectionStateChanged(QAbstractSocket::SocketState state)
+{
+    switch(state){
+    case  QAbstractSocket::UnconnectedState :
+        m_ptxt->append("The socket is not connected.");
+        break;
+    case QAbstractSocket::HostLookupState :
+        m_ptxt->append("The socket is performing a host name lookup.");
+        break;
+    case QAbstractSocket::ConnectingState :
+        m_ptxt->append("The socket has started establishing a connection.");
+        break;
+    case QAbstractSocket::ConnectedState :
+        m_ptxt->append("A connection is established.");
+        break;
+    case QAbstractSocket::BoundState :
+        m_ptxt->append("The socket is bound to an address and port.");
+        break;
+    case QAbstractSocket::ClosingState :
+        m_ptxt->append("The socket is about to close (data may still be waiting to be written).");
+        break;
+    case QAbstractSocket::ListeningState :
+        m_ptxt->append("For internal use only.");
+    }
 }

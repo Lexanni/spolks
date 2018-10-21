@@ -7,16 +7,16 @@
 // ----------------------------------------------------------------------
 MyClient::MyClient(QWidget*       pwgt /*=0*/
                   ) : QWidget(pwgt)
-                    , m_nNextBlockSize(0)
+                    , nextBlockSize(0)
 {
-    m_ptxtInfo  = new QTextEdit;
-    m_ptxtInput = new QLineEdit;
-    m_ptxtInput->setEnabled(false);
+    pTxtInfo  = new QTextEdit;
+    pTxtInput = new QLineEdit;
+    pTxtInput->setEnabled(false);
 
-    connect(m_ptxtInput, SIGNAL(returnPressed()), 
+    connect(pTxtInput, SIGNAL(returnPressed()),
             this,        SLOT(parseInput())
            );
-    m_ptxtInfo->setReadOnly(true);
+    pTxtInfo->setReadOnly(true);
 
     QPushButton* pcmd = new QPushButton("&Send");
     connect(pcmd, SIGNAL(clicked()), SLOT(parseInput()));
@@ -27,8 +27,8 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     progressBar->setMinimum(0);
     progressBar->setValue(0);
 
-    m_ptxtIp   = new QLineEdit("localhost");
-    m_ptxtPort = new QLineEdit("2323");
+    pTxtIp   = new QLineEdit("localhost");
+    pTxtPort = new QLineEdit("2323");
     bConnect    = new QPushButton("Connect");
     bDisconnect = new QPushButton("Disconnect");
     bDisconnect->setEnabled(false);
@@ -38,9 +38,9 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
 
     QHBoxLayout* addressLayout = new QHBoxLayout();
     addressLayout->addWidget(new QLabel("IP: "));
-    addressLayout->addWidget(m_ptxtIp);
+    addressLayout->addWidget(pTxtIp);
     addressLayout->addWidget(new QLabel("Port: "));
-    addressLayout->addWidget(m_ptxtPort);
+    addressLayout->addWidget(pTxtPort);
     addressLayout->addWidget(bConnect);
     addressLayout->addWidget(bDisconnect);
 
@@ -49,12 +49,25 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     QVBoxLayout* pvbxLayout = new QVBoxLayout;
     pvbxLayout->addWidget(new QLabel("<H1>Client</H1>"));
     pvbxLayout->addLayout(addressLayout);
-    pvbxLayout->addWidget(m_ptxtInfo);
+    pvbxLayout->addWidget(pTxtInfo);
     pvbxLayout->addWidget(labelSpeed);
     pvbxLayout->addWidget(progressBar);
-    pvbxLayout->addWidget(m_ptxtInput);
+    pvbxLayout->addWidget(pTxtInput);
     pvbxLayout->addWidget(pcmd);
     setLayout(pvbxLayout);
+
+    QFile file(options_file_name);
+    if(file.open(QIODevice::ReadOnly)) {
+        pTxtInfo->append("Client ID was readed from options file.");
+        file.read((char *)&id, sizeof(id));
+        file.close();
+    }
+
+}
+
+MyClient::~MyClient()
+{
+    QFile::remove(options_file_name);
 }
 // ----------------------------------------------------------------------
 void MyClient::slotReadyRead()
@@ -64,15 +77,15 @@ void MyClient::slotReadyRead()
     disconnect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadyRead()));
     QDataStream in(pSocket);
     in.setVersion(QDataStream::Qt_5_9);
-    qDebug () << "read buffer size = " << pSocket->readBufferSize() << endl;
+    //qDebug () << "read buffer size = " << pSocket->readBufferSize() << endl;
     forever {
-        if (!m_nNextBlockSize) {
-            if (m_pTcpSocket->bytesAvailable() < (int)sizeof(quint16)) {
+        if (!nextBlockSize) {
+            if (pTcpSocket->bytesAvailable() < (int)sizeof(quint16)) {
                 break;
             }
-            in >> m_nNextBlockSize;
+            in >> nextBlockSize;
         }
-        if (m_pTcpSocket->bytesAvailable() < m_nNextBlockSize) {
+        if (pTcpSocket->bytesAvailable() < nextBlockSize) {
             break;
         }
 
@@ -82,37 +95,51 @@ void MyClient::slotReadyRead()
     switch (respType)
     {
         case MsgType::Sync :
-            int resiveId;
-            in >> resiveId;
-            qDebug () << "resived Id = " << resiveId << endl;
-            if(id != resiveId)
-                id = resiveId;
+            {
+                int resiveId;
+                in >> resiveId;
+                qDebug () << "resived Id = " << resiveId << endl;
+                if(id != resiveId) {
+                    id = resiveId;
+                    pTxtInfo->append("Server has assigned you new client ID: " + QString::number(id));
+                }
+                else
+                    pTxtInfo->append("The server has confirmed your client ID: " + QString::number(id));
+
+                QFile file(options_file_name);
+                if(!file.open(QIODevice::WriteOnly)) {
+                    pTxtInfo->append("Cannot write client id to options file. File open error.");
+                }
+
+                file.write((char *)&id, sizeof(id));
+                file.close();
+            }
             break;
         case MsgType::Echo :
             in >> s;
-            m_ptxtInfo->append("Server: " + s);
-            m_ptxtInput->clear();
+            pTxtInfo->append("Server: " + s);
+            pTxtInput->clear();
             break;
         case MsgType::Time :
             {
             QTime time;
             in >> time;
-            m_ptxtInfo->append("Server: " + time.toString());
-            m_ptxtInput->clear();
+            pTxtInfo->append("Server: " + time.toString());
+            pTxtInput->clear();
             break;
             }
         case MsgType::Msg :
             in >> s;
-            m_ptxtInfo->append("Server: " + s);
-            m_ptxtInput->clear();
+            pTxtInfo->append("Server: " + s);
+            pTxtInput->clear();
             break;
         case MsgType::DataAnonce :
             {
                 in >> fileName;
                 in >> fileSize;
-                qDebug() << "Recived DataAnonce. FileName: " << fileName << " size: " << fileSize << endl;
-                m_ptxtInfo->append("Server: " + s + " " + QString::number(fileSize) + " bytes");
-                m_ptxtInput->clear();
+                // qDebug() << "Recived DataAnonce. FileName: " << fileName << " size: " << fileSize << endl;
+                pTxtInfo->append("Server: " + s + " " + QString::number(fileSize) + " bytes");
+                pTxtInput->clear();
                 slotSendToServer(MsgType::DataRequest, {fileName, 0, qMin(fileSize, blockSize)});
                 time.start();
             }
@@ -122,7 +149,7 @@ void MyClient::slotReadyRead()
                 qint64 offset;
                 qint64 size;
                 in >> offset >> size;
-                qDebug() << "Recived data. Size: " << size << endl;
+                // qDebug() << "Recived data. Size: " << size << endl;
 
 
 
@@ -154,10 +181,10 @@ void MyClient::slotReadyRead()
             }
             break;
         default:
-            m_ptxtInfo->append("Unknown response");
+            pTxtInfo->append("Unknown response");
     }
 
-    m_nNextBlockSize = 0;
+    nextBlockSize = 0;
 
     break;
     }
@@ -173,9 +200,11 @@ void MyClient::slotError(QAbstractSocket::SocketError err)
                      "The remote host is closed." :
                      err == QAbstractSocket::ConnectionRefusedError ? 
                      "The connection was refused." :
-                     QString(m_pTcpSocket->errorString())
+                     err == QAbstractSocket::NetworkError ?
+                     "Network Error" :
+                     QString(pTcpSocket->errorString())
                     );
-    m_ptxtInfo->append(strError);
+    pTxtInfo->append(strError);
 }
 
 void MyClient::slotSendToServer(MyClient::MsgType type, QList<QVariant> args)
@@ -210,19 +239,22 @@ void MyClient::slotSendToServer(MyClient::MsgType type, QList<QVariant> args)
 
                 out << qint8(MsgType::DataRequest) << a1 << a2 << a3;
             }
+            break;
+        case MsgType::Alive :
+            out << qint8(MsgType::Alive);
     }
 
     out.device()->seek(0);
     out << quint16(arrBlock.size() - sizeof(quint16));
 
-    m_pTcpSocket->write(arrBlock);
-    m_ptxtInput->setText("");
+    pTcpSocket->write(arrBlock);
+    pTxtInput->setText("");
 }
 // ----------------------------------------------------------------------
 void MyClient::parseInput()
 {
     QList<QVariant> args;
-    QString s = m_ptxtInput->text();
+    QString s = pTxtInput->text();
     int i = s.indexOf(" ");
     QString cmd = s.mid(0, i);
     args.append(s.mid(i + 1));
@@ -237,41 +269,73 @@ void MyClient::parseInput()
     else if (cmd == "DOWNLOAD")
         slotSendToServer(MsgType::Download, args);
     else
-        m_ptxtInfo->append("Unknown command!");
+        pTxtInfo->append("Unknown command!");
 }
 
 // ------------------------------------------------------------------
 void MyClient::slotConnected()
 {
-    m_ptxtInfo->append("Received the connected() signal");
+    // m_ptxtInfo->append("Received the connected() signal");
     slotSendToServer(MsgType::Sync);
 }
 
 void MyClient::slotConnectToHost()
 {
-    m_pTcpSocket = new QTcpSocket(this);
-    QString strHost = m_ptxtIp->text();
-    int nPort = m_ptxtPort->text().toInt();
-    qDebug () << "strHost: " << strHost << ", port: " << nPort;
-    m_pTcpSocket->connectToHost(strHost, nPort);
-    connect(m_pTcpSocket, SIGNAL(connected()), SLOT(slotConnected()));
-    connect(m_pTcpSocket, SIGNAL(readyRead()), SLOT(slotReadyRead()));
-    connect(m_pTcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
+    pTcpSocket = new QTcpSocket(this);
+    QString strHost = pTxtIp->text();
+    int nPort = pTxtPort->text().toInt();
+//    qDebug () << "strHost: " << strHost << ", port: " << nPort;
+    pTcpSocket->connectToHost(strHost, nPort);
+    connect(pTcpSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
+            this, SLOT(slotConnectionStateChanged(QAbstractSocket::SocketState)));
+    connect(pTcpSocket, SIGNAL(connected()), SLOT(slotConnected()));
+    connect(pTcpSocket, SIGNAL(readyRead()), SLOT(slotReadyRead()));
+    connect(pTcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
             this,         SLOT(slotError(QAbstractSocket::SocketError))
            );
     bConnect->setEnabled(false);
+    pTxtIp->setEnabled(false);
+    pTxtPort->setEnabled(false);
     bDisconnect->setEnabled(true);
-    m_ptxtInput->setEnabled(true);
+    pTxtInput->setEnabled(true);
 }
 
 void MyClient::slotDisconnectFromHost()
 {
-    m_pTcpSocket->disconnectFromHost();
-    if (m_pTcpSocket->state() == QAbstractSocket::ConnectedState) {
-        m_pTcpSocket->waitForDisconnected();
+    pTcpSocket->disconnectFromHost();
+    if (pTcpSocket->state() == QAbstractSocket::ConnectedState) {
+        pTcpSocket->waitForDisconnected();
     }
-    delete m_pTcpSocket;
+    delete pTcpSocket;
     bConnect->setEnabled(true);
     bDisconnect->setEnabled(false);
-    m_ptxtInput->setEnabled(false);
+    pTxtInput->setEnabled(false);
+    pTxtIp->setEnabled(true);
+    pTxtPort->setEnabled(true);
+}
+
+void MyClient::slotConnectionStateChanged(QAbstractSocket::SocketState state)
+{
+    switch(state){
+    case  QAbstractSocket::UnconnectedState :
+        pTxtInfo->append("The socket is not connected.");
+        break;
+    case QAbstractSocket::HostLookupState :
+        pTxtInfo->append("The socket is performing a host name lookup.");
+        break;
+    case QAbstractSocket::ConnectingState :
+        pTxtInfo->append("The socket has started establishing a connection.");
+        break;
+    case QAbstractSocket::ConnectedState :
+        pTxtInfo->append("A connection is established.");
+        break;
+    case QAbstractSocket::BoundState :
+        pTxtInfo->append("The socket is bound to an address and port.");
+        break;
+    case QAbstractSocket::ClosingState :
+        pTxtInfo->append("The socket is about to close (data may still be waiting to be written).");
+        break;
+    case QAbstractSocket::ListeningState :
+        pTxtInfo->append("For internal use only.");
+    }
 }

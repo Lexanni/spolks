@@ -3,12 +3,14 @@
 #include <QWidget>
 #include <QFile>
 #include <QtMath>
+#include <QAbstractSocket>
 
 class QTcpServer;
 class QTextEdit;
 class QTcpSocket;
 class QFile;
 class QLineEdit;
+class QPushButton;
 
 class MyServer : public QWidget {
 Q_OBJECT
@@ -23,6 +25,8 @@ private:
     QFile       file;
     QString     fileName;
     QByteArray  buffer;
+    QPushButton * bListen;
+    QPushButton * bResume;
 
     enum MsgType {
         Sync,
@@ -34,7 +38,9 @@ private:
         Data,
         DataAnonce,
         DataRequest,
-        DownloadAck
+        DownloadAck,
+        Alive,
+        AckAlive
     };
 
 private:
@@ -48,5 +54,7 @@ public slots:
             void slotReadClient();
             void hDisconnected();
             void slotListen();
+            void slotResume();
+            void slotConnectionStateChanged(QAbstractSocket::SocketState state);
 };
 
