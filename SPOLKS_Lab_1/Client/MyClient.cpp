@@ -333,6 +333,8 @@ void MyClient::slotConnectionStateChanged(QAbstractSocket::SocketState state)
     switch(state){
     case  QAbstractSocket::UnconnectedState :
         pTxtInfo->append("The socket is not connected.");
+//        if (pTcpSocket != nullptr)
+//            slotDisconnectFromHost();
         break;
     case QAbstractSocket::HostLookupState :
         pTxtInfo->append("The socket is performing a host name lookup.");
