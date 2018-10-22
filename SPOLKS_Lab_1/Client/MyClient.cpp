@@ -63,7 +63,8 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
         file.close();
     }
 
-    aliveTimer = new QTimer(this);
+    aliveTimer = new QTimer();
+    aliveTimer->setInterval(2000);
     connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
 
 }
@@ -153,8 +154,6 @@ void MyClient::slotReadyRead()
                 qint64 size;
                 in >> offset >> size;
                 // qDebug() << "Recived data. Size: " << size << endl;
-
-
 
                 QBuffer bufferStream(&buffer);
                 bufferStream.open(QIODevice::Append);
@@ -290,7 +289,7 @@ void MyClient::slotConnected()
 {
     // m_ptxtInfo->append("Received the connected() signal");
     slotSendToServer(MsgType::Sync);
-    aliveTimer->start(2000);
+    // aliveTimer->start();
 }
 
 void MyClient::slotConnectToHost()
@@ -316,6 +315,7 @@ void MyClient::slotConnectToHost()
 
 void MyClient::slotDisconnectFromHost()
 {
+    aliveTimer->stop();
     pTcpSocket->disconnectFromHost();
     if (pTcpSocket->state() == QAbstractSocket::ConnectedState) {
         pTcpSocket->waitForDisconnected();

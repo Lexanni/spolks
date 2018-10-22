@@ -35,7 +35,8 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
     pvbxLayout->addWidget(m_ptxt);
     setLayout(pvbxLayout);
 
-    aliveTimer = new QTimer(this);
+    aliveTimer = new QTimer();
+    aliveTimer->setInterval(1777);
     connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
 }
 
@@ -54,7 +55,7 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
                 this,          SLOT(slotConnectionStateChanged(QAbstractSocket::SocketState)));
         connect(pClientSocket, SIGNAL(aboutToClose()), this, SLOT(slotAboutToClose()));
         countClients++;
-        aliveTimer->start(2000);
+        // aliveTimer->start();
         //sendToClient(pClientSocket, "Server Response: Connected!");
     }
     else {
