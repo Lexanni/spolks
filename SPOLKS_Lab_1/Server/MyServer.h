@@ -11,6 +11,7 @@ class QTcpSocket;
 class QFile;
 class QLineEdit;
 class QPushButton;
+class QTimer;
 
 class MyServer : public QWidget {
 Q_OBJECT
@@ -20,6 +21,7 @@ private:
     QTextEdit*  m_ptxt;
     QLineEdit*  m_ptxtPort;
     quint16     m_nNextBlockSize;
+    int         nPort;
     int         countClients = 0;
     int         curClientId  = 100500;
     QFile       file;
@@ -27,6 +29,8 @@ private:
     QByteArray  buffer;
     QPushButton * bListen;
     QPushButton * bResume;
+    QTimer      * aliveTimer;
+    int         aliveCounter = 0;
 
     enum MsgType {
         Sync,
@@ -57,5 +61,6 @@ public slots:
             void slotResume();
             void slotConnectionStateChanged(QAbstractSocket::SocketState state);
             void slotAboutToClose();
+            void slotAlive();
 };
 

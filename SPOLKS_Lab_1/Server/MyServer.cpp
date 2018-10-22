@@ -34,6 +34,9 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
     pvbxLayout->addLayout(portLayout);
     pvbxLayout->addWidget(m_ptxt);
     setLayout(pvbxLayout);
+
+    aliveTimer = new QTimer(this);
+    connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
 }
 
 // ----------------------------------------------------------------------
@@ -51,6 +54,7 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
                 this,          SLOT(slotConnectionStateChanged(QAbstractSocket::SocketState)));
         connect(pClientSocket, SIGNAL(aboutToClose()), this, SLOT(slotAboutToClose()));
         countClients++;
+        aliveTimer->start(2000);
         //sendToClient(pClientSocket, "Server Response: Connected!");
     }
     else {
@@ -144,6 +148,12 @@ void MyServer::slotReadClient()
             fileName.clear();
             buffer.clear();
             break;
+        case MsgType::Alive :
+            sendToClient(MsgType::AckAlive);
+            break;
+        case MsgType::AckAlive :
+            aliveCounter = 0;
+            break;
         // default:
     }
     m_nNextBlockSize = 0;
@@ -195,6 +205,12 @@ void MyServer::sendToClient(MsgType type, QList<QVariant> args)
                 out << buffStream.read(size);
             }
             break;
+        case MsgType::Alive :
+            out << qint8(MsgType::Alive);
+            break;
+        case MsgType::AckAlive :
+            out << qint8(MsgType::AckAlive);
+            break;
         // default:
     }
 
@@ -216,7 +232,7 @@ void MyServer::hDisconnected()
 
 void MyServer::slotListen()
 {
-    int nPort = m_ptxtPort->text().toInt();
+    nPort = m_ptxtPort->text().toInt();
     if (!m_ptcpServer->listen(QHostAddress::Any, nPort)) {
         QMessageBox::critical(0,
                               "Server Error",
@@ -251,6 +267,9 @@ void MyServer::slotConnectionStateChanged(QAbstractSocket::SocketState state)
     switch(state){
     case  QAbstractSocket::UnconnectedState :
         m_ptxt->append("The socket is not connected.");
+//        m_ptcpServer->close();
+//        m_ptcpServer->listen(QHostAddress::Any, nPort);
+//        pClientSocket->reset();
         break;
     case QAbstractSocket::HostLookupState :
         m_ptxt->append("The socket is performing a host name lookup.");
@@ -275,4 +294,17 @@ void MyServer::slotConnectionStateChanged(QAbstractSocket::SocketState state)
 void MyServer::slotAboutToClose()
 {
     m_ptxt->append("Device about to close.");
+}
+
+void MyServer::slotAlive()
+{
+    aliveCounter++;
+    if(aliveCounter > 3)
+    {
+        aliveCounter = 0;
+        aliveTimer->stop();
+        slotResume();
+        return;
+    }
+    sendToClient(MsgType::Alive);
 }

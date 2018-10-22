@@ -7,6 +7,7 @@
 #include <QBuffer>
 #include <QtMath>
 #include <QTime>
+#include <QTimer>
 #include <QProgressBar>
 #include <QPushButton>
 
@@ -33,6 +34,8 @@ private:
     QLabel *    labelSpeed;
     QProgressBar * progressBar;
     QTime       time;
+    QTimer      * aliveTimer;
+    int         aliveCounter = 0;
 
     QPushButton* bConnect;
     QPushButton* bDisconnect;
@@ -73,4 +76,5 @@ private slots:
     void slotConnectToHost();
     void slotDisconnectFromHost();
     void slotConnectionStateChanged(QAbstractSocket::SocketState state);
+    void slotAlive();
 };

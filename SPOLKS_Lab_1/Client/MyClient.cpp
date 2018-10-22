@@ -63,6 +63,9 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
         file.close();
     }
 
+    aliveTimer = new QTimer(this);
+    connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
+
 }
 
 MyClient::~MyClient()
@@ -180,6 +183,12 @@ void MyClient::slotReadyRead()
                                                         blockSize)});
             }
             break;
+        case MsgType::Alive :
+            slotSendToServer(MsgType::AckAlive);
+            break;
+        case MsgType::AckAlive :
+            aliveCounter = 0;
+            break;
         default:
             pTxtInfo->append("Unknown response");
     }
@@ -242,6 +251,10 @@ void MyClient::slotSendToServer(MyClient::MsgType type, QList<QVariant> args)
             break;
         case MsgType::Alive :
             out << qint8(MsgType::Alive);
+            break;
+        case MsgType::AckAlive :
+            out << qint8(MsgType::AckAlive);
+            break;
     }
 
     out.device()->seek(0);
@@ -277,6 +290,7 @@ void MyClient::slotConnected()
 {
     // m_ptxtInfo->append("Received the connected() signal");
     slotSendToServer(MsgType::Sync);
+    aliveTimer->start(2000);
 }
 
 void MyClient::slotConnectToHost()
@@ -319,15 +333,6 @@ void MyClient::slotConnectionStateChanged(QAbstractSocket::SocketState state)
     switch(state){
     case  QAbstractSocket::UnconnectedState :
         pTxtInfo->append("The socket is not connected.");
-        if (pTcpSocket != nullptr)
-        {
-            delete pTcpSocket;
-            bConnect->setEnabled(true);
-            bDisconnect->setEnabled(false);
-            pTxtInput->setEnabled(false);
-            pTxtIp->setEnabled(true);
-            pTxtPort->setEnabled(true);
-        }
         break;
     case QAbstractSocket::HostLookupState :
         pTxtInfo->append("The socket is performing a host name lookup.");
@@ -347,4 +352,17 @@ void MyClient::slotConnectionStateChanged(QAbstractSocket::SocketState state)
     case QAbstractSocket::ListeningState :
         pTxtInfo->append("For internal use only.");
     }
+}
+
+void MyClient::slotAlive()
+{
+    aliveCounter++;
+    if(aliveCounter > 3)
+    {
+        aliveCounter = 0;
+        aliveTimer->stop();
+        slotDisconnectFromHost();
+        return;
+    }
+    slotSendToServer(MsgType::Alive);
 }
