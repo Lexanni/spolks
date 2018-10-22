@@ -49,6 +49,7 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
                );
         connect(pClientSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
                 this,          SLOT(slotConnectionStateChanged(QAbstractSocket::SocketState)));
+        connect(pClientSocket, SIGNAL(aboutToClose()), this, SLOT(slotAboutToClose()));
         countClients++;
         //sendToClient(pClientSocket, "Server Response: Connected!");
     }
@@ -269,4 +270,9 @@ void MyServer::slotConnectionStateChanged(QAbstractSocket::SocketState state)
     case QAbstractSocket::ListeningState :
         m_ptxt->append("For internal use only.");
     }
+}
+
+void MyServer::slotAboutToClose()
+{
+    m_ptxt->append("Device about to close.");
 }

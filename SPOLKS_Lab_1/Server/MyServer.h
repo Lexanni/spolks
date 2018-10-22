@@ -56,5 +56,6 @@ public slots:
             void slotListen();
             void slotResume();
             void slotConnectionStateChanged(QAbstractSocket::SocketState state);
+            void slotAboutToClose();
 };
 
