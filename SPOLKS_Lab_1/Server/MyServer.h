@@ -20,6 +20,7 @@ private:
     QTextEdit*  m_ptxt;
     QLineEdit*  m_ptxtPort;
     quint16     m_nNextBlockSize;
+    int         nPort;
     int         countClients = 0;
     int         curClientId  = 100500;
     QFile       file;

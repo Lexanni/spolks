@@ -216,7 +216,7 @@ void MyServer::hDisconnected()
 
 void MyServer::slotListen()
 {
-    int nPort = m_ptxtPort->text().toInt();
+    nPort = m_ptxtPort->text().toInt();
     if (!m_ptcpServer->listen(QHostAddress::Any, nPort)) {
         QMessageBox::critical(0,
                               "Server Error",
@@ -251,6 +251,8 @@ void MyServer::slotConnectionStateChanged(QAbstractSocket::SocketState state)
     switch(state){
     case  QAbstractSocket::UnconnectedState :
         m_ptxt->append("The socket is not connected.");
+        m_ptcpServer->close();
+        m_ptcpServer->listen(QHostAddress::Any, nPort);
         break;
     case QAbstractSocket::HostLookupState :
         m_ptxt->append("The socket is performing a host name lookup.");
