@@ -248,6 +248,9 @@ void MyClient::slotSendToServer(MyClient::MsgType type, QList<QVariant> args)
                 out << qint8(MsgType::DataRequest) << a1 << a2 << a3;
             }
             break;
+        case MsgType::DownloadAck :
+            out << qint8(MsgType::DownloadAck);
+            break;
         case MsgType::Alive :
             out << qint8(MsgType::Alive);
             break;
