@@ -56,6 +56,14 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     pvbxLayout->addWidget(pcmd);
     setLayout(pvbxLayout);
 
+    //Shortcut
+    pKeyUp = new QShortcut(Qt::Key_Up, pTxtInput);
+    pKeyDown = new QShortcut(Qt::Key_Down, pTxtInput);
+
+    connect(pKeyUp,   SIGNAL(activated()), this, SLOT(slotListLastCommandsStepUp()  ));
+    connect(pKeyDown, SIGNAL(activated()), this, SLOT(slotListLastCommandsStepDown()));
+
+
     QFile file(options_file_name);
     if(file.open(QIODevice::ReadOnly)) {
         pTxtInfo->append("Client ID was readed from options file.");
@@ -263,13 +271,16 @@ void MyClient::slotSendToServer(MyClient::MsgType type, QList<QVariant> args)
     out << quint16(arrBlock.size() - sizeof(quint16));
 
     pTcpSocket->write(arrBlock);
-    pTxtInput->setText("");
+    // pTxtInput->setText("");
 }
 // ----------------------------------------------------------------------
 void MyClient::parseInput()
 {
     QList<QVariant> args;
     QString s = pTxtInput->text();
+    listLastComands.append(s);
+    cur_command = listLastComands.size() - 1;
+    pTxtInput->clear();
     int i = s.indexOf(" ");
     QString cmd = s.mid(0, i);
     args.append(s.mid(i + 1));
@@ -370,4 +381,22 @@ void MyClient::slotAlive()
         return;
     }
     slotSendToServer(MsgType::Alive);
+}
+
+void MyClient::slotListLastCommandsStepUp()
+{
+    if(listLastComands.empty())
+        return;
+    pTxtInput->setText(listLastComands[cur_command]);
+    if(cur_command)
+        cur_command--;
+}
+
+void MyClient::slotListLastCommandsStepDown()
+{
+    if(listLastComands.empty())
+        return;
+    pTxtInput->setText(listLastComands[cur_command]);
+    if(cur_command != listLastComands.size() - 1)
+        cur_command++;
 }

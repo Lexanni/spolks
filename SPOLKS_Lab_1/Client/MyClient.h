@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QShortcut>
 
 class QTextEdit;
 class QLineEdit;
@@ -41,6 +42,10 @@ private:
     QPushButton* bDisconnect;
 
     QString     options_file_name = "client_options";
+    QList<QString> listLastComands;
+    int         cur_command;
+    QShortcut   *pKeyUp;
+    QShortcut   *pKeyDown;
 
 
     enum MsgType {
@@ -77,4 +82,6 @@ private slots:
     void slotDisconnectFromHost();
     void slotConnectionStateChanged(QAbstractSocket::SocketState state);
     void slotAlive();
+    void slotListLastCommandsStepUp();
+    void slotListLastCommandsStepDown();
 };
