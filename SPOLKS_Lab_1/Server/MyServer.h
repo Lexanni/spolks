@@ -5,23 +5,25 @@
 #include <QtMath>
 #include <QAbstractSocket>
 
-class QTcpServer;
-class QTextEdit;
-class QTcpSocket;
-class QFile;
-class QLineEdit;
-class QPushButton;
-class QTimer;
+#include <QTcpServer>
+#include <QTextEdit>
+#include <QTcpSocket>
+#include <QFile>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QTimer>
+#include <QUdpSocket>
 
 class MyServer : public QWidget {
 Q_OBJECT
 private:
-    QTcpServer* m_ptcpServer;
-    QTcpSocket* pClientSocket;
-    QTextEdit*  m_ptxt;
-    QLineEdit*  m_ptxtPort;
-    quint16     m_nNextBlockSize;
-    int         nPort;
+    QTcpServer* pTcpServer;
+    QTcpSocket* pTcpSocket;
+    QUdpSocket* pUdpSocket;
+    QTextEdit*  pTxt;
+    QLineEdit*  pTxtTcpPort;
+    QLineEdit*  pTxtUdpPort;
+    quint16     nextBlockSize;
     int         countClients = 0;
     int         curClientId  = 100500;
     QFile       file;
@@ -29,8 +31,12 @@ private:
     QByteArray  buffer;
     QPushButton * bListen;
     QPushButton * bResume;
+    QPushButton * bBind;
+    QPushButton * bUnbind;
     QTimer      * aliveTimer;
     int         aliveCounter = 0;
+    QHostAddress udpSenderAddress;
+    quint16      udpSenderPort;
 
     enum MsgType {
         Sync,
@@ -46,21 +52,28 @@ private:
         Alive,
         AckAlive
     };
+    enum SocketType {
+        TCP,
+        UDP
+    };
 
 private:
-    void sendToClient(MsgType type, QList<QVariant> args = QList<QVariant>());
-
+    void sendMsg(SocketType socketType, MsgType type, QList<QVariant> args = QList<QVariant>());
+    void processRecivedData(SocketType soketType, QDataStream &in);
 public:
     MyServer(QWidget* pwgt = 0);
 
 public slots:
     virtual void slotNewConnection();
-            void slotReadClient();
-            void hDisconnected();
+            void slotDisconnected();
             void slotListen();
             void slotResume();
             void slotConnectionStateChanged(QAbstractSocket::SocketState state);
             void slotAboutToClose();
             void slotAlive();
+            void slotBind();
+            void slotUnbind();
+            void slotReadTcpSocket();
+            void slotReadUdpSocket();
 };
 

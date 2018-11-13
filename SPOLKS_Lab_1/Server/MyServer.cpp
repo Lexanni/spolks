@@ -5,34 +5,47 @@
 
 // ----------------------------------------------------------------------
 MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
-                                                    , m_nNextBlockSize(0)
+                                                    , nextBlockSize(0)
 {
-    m_ptcpServer = new QTcpServer(this); 
-    connect(m_ptcpServer, SIGNAL(newConnection()), 
+    pTcpServer = new QTcpServer(this);
+    connect(pTcpServer, SIGNAL(newConnection()),
             this,         SLOT(slotNewConnection())
            );
 
-    m_ptxt = new QTextEdit;
-    m_ptxt->setReadOnly(true);
-    m_ptxtPort = new QLineEdit("2323");
+    pTxt = new QTextEdit;
+    pTxt->setReadOnly(true);
+    pTxtTcpPort = new QLineEdit("2323");
+    pTxtUdpPort = new QLineEdit("12345");
     bListen = new QPushButton("Listen");
     bResume = new QPushButton("Resume");
     bResume->setEnabled(false);
+    bBind   = new QPushButton("Bind");
+    bUnbind = new QPushButton("Unbind");
+    bUnbind->setEnabled(false);
 
     connect(bListen, SIGNAL(clicked()), this, SLOT(slotListen()));
     connect(bResume, SIGNAL(clicked()), this, SLOT(slotResume()));
+    connect(bBind  , SIGNAL(clicked()), this, SLOT(slotBind())  );
+    connect(bUnbind, SIGNAL(clicked()), this, SLOT(slotUnbind()));
 
-    QHBoxLayout * portLayout = new QHBoxLayout();
-    portLayout->addWidget(new QLabel("Port: "));
-    portLayout->addWidget(m_ptxtPort);
-    portLayout->addWidget(bListen);
-    portLayout->addWidget(bResume);
+    QHBoxLayout * tcpPortLayout = new QHBoxLayout();
+    tcpPortLayout->addWidget(new QLabel("TCP port: "));
+    tcpPortLayout->addWidget(pTxtTcpPort);
+    tcpPortLayout->addWidget(bListen);
+    tcpPortLayout->addWidget(bResume);
+
+    QHBoxLayout * udpPortLayout = new QHBoxLayout();
+    udpPortLayout->addWidget(new QLabel("UDP port: "));
+    udpPortLayout->addWidget(pTxtUdpPort);
+    udpPortLayout->addWidget(bBind);
+    udpPortLayout->addWidget(bUnbind);
 
     //Layout setup
     QVBoxLayout* pvbxLayout = new QVBoxLayout;    
     pvbxLayout->addWidget(new QLabel("<H1>Server</H1>"));
-    pvbxLayout->addLayout(portLayout);
-    pvbxLayout->addWidget(m_ptxt);
+    pvbxLayout->addLayout(tcpPortLayout);
+    pvbxLayout->addLayout(udpPortLayout);
+    pvbxLayout->addWidget(pTxt);
     setLayout(pvbxLayout);
 
     aliveTimer = new QTimer();
@@ -44,22 +57,22 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
 /*virtual*/ void MyServer::slotNewConnection()
 {
     if(countClients == 0){
-        pClientSocket = m_ptcpServer->nextPendingConnection();
-        connect(pClientSocket, SIGNAL(disconnected()),
-                this, SLOT(hDisconnected())
+        pTcpSocket = pTcpServer->nextPendingConnection();
+        connect(pTcpSocket, SIGNAL(disconnected()),
+                this,       SLOT(slotDisconnected())
                );
-        connect(pClientSocket, SIGNAL(readyRead()),
-                this,          SLOT(slotReadClient())
+        connect(pTcpSocket, SIGNAL(readyRead()),
+                this,       SLOT(slotReadTcpSocket())
                );
-        connect(pClientSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
-                this,          SLOT(slotConnectionStateChanged(QAbstractSocket::SocketState)));
-        connect(pClientSocket, SIGNAL(aboutToClose()), this, SLOT(slotAboutToClose()));
+        connect(pTcpSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
+                this,       SLOT(slotConnectionStateChanged(QAbstractSocket::SocketState)));
+        connect(pTcpSocket, SIGNAL(aboutToClose()), this, SLOT(slotAboutToClose()));
         countClients++;
         // aliveTimer->start();
         //sendToClient(pClientSocket, "Server Response: Connected!");
     }
     else {
-        QTcpSocket * pDiscardSocket = m_ptcpServer->nextPendingConnection();
+        QTcpSocket * pDiscardSocket = pTcpServer->nextPendingConnection();
         //sendToClient(pDiscardSocket, "Server Response: Connection rejected.");
 
         pDiscardSocket->disconnectFromHost();
@@ -71,97 +84,26 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
 }
 
 // ----------------------------------------------------------------------
-void MyServer::slotReadClient()
+void MyServer::slotReadTcpSocket()
 {
     QTcpSocket* pClientSocket = (QTcpSocket*)sender();
     QDataStream in(pClientSocket);
     in.setVersion(QDataStream::Qt_5_9);
-
-    if (!m_nNextBlockSize) {
+    if (!nextBlockSize) {
         if (pClientSocket->bytesAvailable() < (int)sizeof(quint16)) {
             return;
         }
-        in >> m_nNextBlockSize;
+        in >> nextBlockSize;
     }
-    if (pClientSocket->bytesAvailable() < m_nNextBlockSize) {
+    if (pClientSocket->bytesAvailable() < nextBlockSize) {
         return;
     }
-
-    QString s;
-    qint8 reqType;
-    in >> reqType;
-    switch(reqType)
-    {
-        case MsgType::Sync :
-            qDebug () << "recive request Sync" << endl;
-            m_ptxt->append("Recive request Sync");
-            int clientId;
-            in >> clientId;
-            if(clientId != curClientId)
-                curClientId++;
-            sendToClient(MsgType::Sync);
-            break;
-         case MsgType::Echo :
-            qDebug () << "recive request Echo" << endl;
-            in >> s;
-            m_ptxt->append("ECHO " + s);
-            sendToClient(MsgType::Echo, {s});
-            break;
-        case MsgType::Time :
-            qDebug () << "recive request Time" << endl;
-            in >> s;
-            m_ptxt->append("TIME");
-            sendToClient(MsgType::Time);
-            break;
-        case MsgType::Close :
-            hDisconnected();
-            break;
-        case MsgType::Download :
-            qDebug () << "recive request Download" << endl;
-            in >> s;
-            m_ptxt->append("DOWNLOAD " + s);
-            if(QFile::exists(s)){
-                qDebug () << "file " + s + " exists" << endl;
-                fileName = s;
-                sendToClient(MsgType::DataAnonce, {s});
-                QFile file(s);
-                file.open(QIODevice::ReadOnly);
-                buffer = file.readAll();
-                file.close();
-            }
-            else
-            {
-                qDebug () << "file " + s + " don't exits!" << endl;
-                sendToClient(MsgType::Msg, {"File don't exist."});
-            }
-            break;
-         case MsgType::DataRequest :
-            {
-//               qDebug () << "Reciver DataRequest" << endl;
-               in >> s;
-               qint64 offset;
-               qint64 blockSize;
-               in >> offset >> blockSize;
-               sendToClient(MsgType::Data, {offset, blockSize});
-            }
-            break;
-         case MsgType::DownloadAck :
-            fileName.clear();
-            buffer.clear();
-            break;
-        case MsgType::Alive :
-            sendToClient(MsgType::AckAlive);
-            break;
-        case MsgType::AckAlive :
-            aliveCounter = 0;
-            break;
-        // default:
-    }
-    m_nNextBlockSize = 0;
+    processRecivedData(SocketType::TCP, in);
+    nextBlockSize = 0;
 }
 
 // ----------------------------------------------------------------------
-void MyServer::sendToClient(MsgType type, QList<QVariant> args)
+void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args)
 {
     QByteArray  arrBlock;
     QDataStream out(&arrBlock, QIODevice::WriteOnly);
@@ -217,38 +159,39 @@ void MyServer::sendToClient(MsgType type, QList<QVariant> args)
 
     out.device()->seek(0);
     out << quint16(arrBlock.size() - sizeof(quint16));
+    if(socketType == SocketType::TCP) {
+        pTcpSocket->write(arrBlock);
+        pTcpSocket->flush();
+    } else {
+        pUdpSocket->writeDatagram(arrBlock, udpSenderAddress, udpSenderPort);
+    }
 
-    pClientSocket->write(arrBlock);
-    pClientSocket->flush();
 }
-// ----------------------------------------------------------------------
-void MyServer::hDisconnected()
+void MyServer::slotDisconnected()
 {
-    if(sender() == pClientSocket){
+    if(sender() == pTcpSocket){
         // qDebug () << "hDisconnected()" << endl;
         countClients--;
-        pClientSocket->disconnectFromHost();
+        pTcpSocket->disconnectFromHost();
     }
 }
-
 void MyServer::slotListen()
 {
-    nPort = m_ptxtPort->text().toInt();
-    if (!m_ptcpServer->listen(QHostAddress::Any, nPort)) {
+    int nPort = pTxtTcpPort->text().toInt();
+    if (!pTcpServer->listen(QHostAddress::Any, nPort)) {
         QMessageBox::critical(0,
                               "Server Error",
                               "Unable to start the server:"
-                              + m_ptcpServer->errorString()
+                              + pTcpServer->errorString()
                              );
-        m_ptcpServer->close();
+        pTcpServer->close();
         return;
     }
-    m_ptxtPort->setEnabled(false);
+    pTxtTcpPort->setEnabled(false);
     bListen->setEnabled(false);
     bResume->setEnabled(true);
-    m_ptxt->append("Listening port " + m_ptxtPort->text());
+    pTxt->append("Listening port " + pTxtTcpPort->text());
 }
-
 void MyServer::slotResume()
 {
 //    if (pClientSocket != nullptr) {
@@ -256,47 +199,153 @@ void MyServer::slotResume()
 //        pClientSocket = nullptr;
 //        countClients--;
 //    }
-    m_ptcpServer->close();
+    pTcpServer->close();
     bListen->setEnabled(true);
     bResume->setEnabled(false);
-    m_ptxtPort->setEnabled(true);
-    m_ptxt->append("Resume port " + m_ptxtPort->text());
+    pTxtTcpPort->setEnabled(true);
+    pTxt->append("Resume port " + pTxtTcpPort->text());
+}
+void MyServer::slotBind()
+{
+    int nPort = pTxtUdpPort->text().toInt();
+    pUdpSocket = new QUdpSocket(this);
+    pUdpSocket->bind(QHostAddress::Any, nPort);
+
+    connect(pUdpSocket, SIGNAL(readyRead()),
+            this, SLOT(slotReadUdpSocket()));
+
+    bBind->setEnabled(false);
+    bUnbind->setEnabled(true);
+    pTxtUdpPort->setEnabled(false);
 }
 
+void MyServer::slotUnbind()
+{
+    disconnect(pUdpSocket, SIGNAL(readyRead()),
+            this, SLOT(slotReadUdpSocket()));
+    pUdpSocket->deleteLater();
+    bBind->setEnabled(true);
+    bUnbind->setEnabled(false);
+    pTxtUdpPort->setEnabled(true);
+}
+void MyServer::slotReadUdpSocket()
+{
+    while (pUdpSocket->hasPendingDatagrams()) {
+        QNetworkDatagram datagram = pUdpSocket->receiveDatagram();
+        udpSenderAddress = datagram.destinationAddress();
+        udpSenderPort    = datagram.destinationPort();
+        QDataStream in(datagram.data());
+        in.setVersion(QDataStream::Qt_5_9);
+        quint8 size;
+        in >> size;
+        processRecivedData(SocketType::UDP, in);
+    }
+}
+void MyServer::processRecivedData(SocketType soketType, QDataStream &in)
+{
+    QString s;
+    qint8 reqType;
+    in >> reqType;
+    switch(reqType)
+    {
+        case MsgType::Sync :
+//            qDebug () << "Sync" << endl;
+            pTxt->append("Sync");
+            int clientId;
+            in >> clientId;
+            if(clientId != curClientId)
+                curClientId++;
+            sendMsg(soketType, MsgType::Sync);
+            break;
+         case MsgType::Echo :
+//            qDebug () << "Echo" << endl;
+            in >> s;
+            pTxt->append("ECHO " + s);
+            sendMsg(soketType, MsgType::Echo, {s});
+            break;
+        case MsgType::Time :
+//            qDebug () << "Time" << endl;
+            in >> s;
+            pTxt->append("TIME");
+            sendMsg(soketType, MsgType::Time);
+            break;
+        case MsgType::Close :
+            slotDisconnected();
+            break;
+        case MsgType::Download :
+//            qDebug () << "Download" << endl;
+            in >> s;
+            pTxt->append("DOWNLOAD " + s);
+            if(QFile::exists(s)){
+//                qDebug () << "file " + s + " exists" << endl;
+                fileName = s;
+                sendMsg(soketType, MsgType::DataAnonce, {s});
+                QFile file(s);
+                file.open(QIODevice::ReadOnly);
+                buffer = file.readAll();
+                file.close();
+            }
+            else
+            {
+//                qDebug () << "file " + s + " don't exits!" << endl;
+                sendMsg(soketType, MsgType::Msg, {"File don't exist."});
+            }
+            break;
+         case MsgType::DataRequest :
+            {
+//               qDebug () << "Reciver DataRequest" << endl;
+               in >> s;
+               qint64 offset;
+               qint64 blockSize;
+               in >> offset >> blockSize;
+               sendMsg(soketType, MsgType::Data, {offset, blockSize});
+            }
+            break;
+         case MsgType::DownloadAck :
+            fileName.clear();
+            buffer.clear();
+            break;
+        case MsgType::Alive :
+            sendMsg(soketType, MsgType::AckAlive);
+            break;
+        case MsgType::AckAlive :
+            aliveCounter = 0;
+            break;
+        // default:
+    }
+}
 void MyServer::slotConnectionStateChanged(QAbstractSocket::SocketState state)
 {
     switch(state){
     case  QAbstractSocket::UnconnectedState :
-        m_ptxt->append("The socket is not connected.");
+        pTxt->append("The socket is not connected.");
 //        m_ptcpServer->close();
 //        m_ptcpServer->listen(QHostAddress::Any, nPort);
 //        pClientSocket->reset();
         break;
     case QAbstractSocket::HostLookupState :
-        m_ptxt->append("The socket is performing a host name lookup.");
+        pTxt->append("The socket is performing a host name lookup.");
         break;
     case QAbstractSocket::ConnectingState :
-        m_ptxt->append("The socket has started establishing a connection.");
+        pTxt->append("The socket has started establishing a connection.");
         break;
     case QAbstractSocket::ConnectedState :
-        m_ptxt->append("A connection is established.");
+        pTxt->append("A connection is established.");
         break;
     case QAbstractSocket::BoundState :
-        m_ptxt->append("The socket is bound to an address and port.");
+        pTxt->append("The socket is bound to an address and port.");
         break;
     case QAbstractSocket::ClosingState :
-        m_ptxt->append("The socket is about to close (data may still be waiting to be written).");
+        pTxt->append("The socket is about to close (data may still be waiting to be written).");
         break;
     case QAbstractSocket::ListeningState :
-        m_ptxt->append("For internal use only.");
+        pTxt->append("For internal use only.");
     }
 }
-
 void MyServer::slotAboutToClose()
 {
-    m_ptxt->append("Device about to close.");
+    pTxt->append("Device about to close.");
 }
-
 void MyServer::slotAlive()
 {
     aliveCounter++;
@@ -307,5 +356,6 @@ void MyServer::slotAlive()
         slotResume();
         return;
     }
-    sendToClient(MsgType::Alive);
+    sendMsg(SocketType::TCP, MsgType::Alive);
 }
+
