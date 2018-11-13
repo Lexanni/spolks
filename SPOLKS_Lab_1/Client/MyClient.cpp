@@ -14,41 +14,65 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     pTxtInput->setEnabled(false);
 
     connect(pTxtInput, SIGNAL(returnPressed()),
-            this,        SLOT(parseInput())
-           );
+            this,        SLOT(parseInput()));
     pTxtInfo->setReadOnly(true);
 
     QPushButton* pcmd = new QPushButton("&Send");
     connect(pcmd, SIGNAL(clicked()), SLOT(parseInput()));
-
+    bProtToogle = new QPushButton("UDP");
+    connect(bProtToogle, SIGNAL(clicked()), this, SLOT(slotToogleProt()));
+    // Speed
     labelSpeed = new QLabel("<H3>Speed</H3>");
     progressBar = new QProgressBar();
     progressBar->setMaximum(100);
     progressBar->setMinimum(0);
     progressBar->setValue(0);
-
-    pTxtIp   = new QLineEdit("localhost");
-    pTxtPort = new QLineEdit("2323");
+    // TCP
+    pTxtTcpIp   = new QLineEdit("localhost");
+    pTxtTcpPort = new QLineEdit("2323");
     bConnect    = new QPushButton("Connect");
     bDisconnect = new QPushButton("Disconnect");
     bDisconnect->setEnabled(false);
 
-    connect(bConnect, SIGNAL(clicked()), this, SLOT(slotConnectToHost()));
+    QHBoxLayout* tcpPortLayout = new QHBoxLayout();
+    tcpPortLayout->addWidget(new QLabel("TCP: Server IP:"));
+    tcpPortLayout->addWidget(pTxtTcpIp);
+    tcpPortLayout->addWidget(new QLabel("Server port:"));
+    tcpPortLayout->addWidget(pTxtTcpPort);
+    tcpPortLayout->addWidget(new QLabel("Protocol:"));
+    tcpPortLayout->addWidget(bProtToogle, 1);
+    tcpPortLayout->addWidget(bConnect, 1);
+    tcpPortLayout->addWidget(bDisconnect, 1);
+
+    connect(bConnect,    SIGNAL(clicked()), this, SLOT(slotConnectToHost()));
     connect(bDisconnect, SIGNAL(clicked()), this, SLOT(slotDisconnectFromHost()));
 
-    QHBoxLayout* addressLayout = new QHBoxLayout();
-    addressLayout->addWidget(new QLabel("IP: "));
-    addressLayout->addWidget(pTxtIp);
-    addressLayout->addWidget(new QLabel("Port: "));
-    addressLayout->addWidget(pTxtPort);
-    addressLayout->addWidget(bConnect);
-    addressLayout->addWidget(bDisconnect);
+    // UDP
+    pTxtUdpIp     = new QLineEdit("localhost");
+    pTxtUdpPort   = new QLineEdit("12345");
+    pTxtUdpMyPort = new QLineEdit("1212");
+    bBind    = new QPushButton("Bind");
+    bUnbind  = new QPushButton("Unbind");
+    bUnbind->setEnabled(false);
 
+    QHBoxLayout* udpPortLayout = new QHBoxLayout();
+    udpPortLayout->addWidget(new QLabel("UDP: Server IP:"));
+    udpPortLayout->addWidget(pTxtUdpIp);
+    udpPortLayout->addWidget(new QLabel("Server port:"));
+    udpPortLayout->addWidget(pTxtUdpPort);
+    udpPortLayout->addWidget(new QLabel("My port: "));
+    udpPortLayout->addWidget(pTxtUdpMyPort, 1);
+    udpPortLayout->addWidget(bBind, 1);
+    udpPortLayout->addWidget(bUnbind, 1);
+
+    connect(bBind  , SIGNAL(clicked()), this, SLOT(slotBind())  );
+    connect(bUnbind, SIGNAL(clicked()), this, SLOT(slotUnbind()));
 
     //Layout setup
     QVBoxLayout* pvbxLayout = new QVBoxLayout;
     pvbxLayout->addWidget(new QLabel("<H1>Client</H1>"));
-    pvbxLayout->addLayout(addressLayout);
+    pvbxLayout->addLayout(tcpPortLayout);
+    pvbxLayout->addLayout(udpPortLayout);
     pvbxLayout->addWidget(pTxtInfo);
     pvbxLayout->addWidget(labelSpeed);
     pvbxLayout->addWidget(progressBar);
@@ -76,17 +100,41 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
 
 }
+void MyClient::slotBind()
+{
+    int nPort = pTxtUdpMyPort->text().toInt();
+    pUdpSocket = new QUdpSocket(this);
+    pUdpSocket->bind(QHostAddress::Any, nPort);
+    udpServerAddress = QHostAddress(pTxtUdpIp->text());
+    udpServerPort    = pTxtUdpPort->text().toInt();
+    connect(pUdpSocket, SIGNAL(readyRead()),
+            this, SLOT(slotReadUdpSocket()));
 
+    bBind->setEnabled(false);
+    bUnbind->setEnabled(true);
+    pTxtUdpPort->setEnabled(false);
+    pTxtUdpMyPort->setEnabled(false);
+    pTxtInput->setEnabled(true);
+}
+void MyClient::slotUnbind()
+{
+    disconnect(pUdpSocket, SIGNAL(readyRead()),
+            this, SLOT(slotReadUdpSocket()));
+    pUdpSocket->deleteLater();
+    bBind->setEnabled(true);
+    bUnbind->setEnabled(false);
+    pTxtUdpPort->setEnabled(true);
+    pTxtUdpMyPort->setEnabled(true);
+    pTxtInput->setEnabled(false);
+}
 MyClient::~MyClient()
 {
     QFile::remove(options_file_name);
 }
-// ----------------------------------------------------------------------
-void MyClient::slotReadyRead()
+void MyClient::slotReadTcpSocket()
 {
-
     QTcpSocket* pSocket = (QTcpSocket*)sender();
-    disconnect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadyRead()));
+    disconnect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadTcpSocket()));
     QDataStream in(pSocket);
     in.setVersion(QDataStream::Qt_5_9);
     //qDebug () << "read buffer size = " << pSocket->readBufferSize() << endl;
@@ -100,113 +148,26 @@ void MyClient::slotReadyRead()
         if (pTcpSocket->bytesAvailable() < nextBlockSize) {
             break;
         }
-
-    QString s;
-    qint8 respType;
-    in >> respType;
-    switch (respType)
-    {
-        case MsgType::Sync :
-            {
-                int resiveId;
-                in >> resiveId;
-                qDebug () << "resived Id = " << resiveId << endl;
-                if(id != resiveId) {
-                    id = resiveId;
-                    pTxtInfo->append("Server has assigned you new client ID: " + QString::number(id));
-                }
-                else
-                    pTxtInfo->append("The server has confirmed your client ID: " + QString::number(id));
-
-                QFile file(options_file_name);
-                if(!file.open(QIODevice::WriteOnly)) {
-                    pTxtInfo->append("Cannot write client id to options file. File open error.");
-                }
-
-                file.write((char *)&id, sizeof(id));
-                file.close();
-            }
-            break;
-        case MsgType::Echo :
-            in >> s;
-            pTxtInfo->append("Server: " + s);
-            pTxtInput->clear();
-            break;
-        case MsgType::Time :
-            {
-            QTime time;
-            in >> time;
-            pTxtInfo->append("Server: " + time.toString());
-            pTxtInput->clear();
-            break;
-            }
-        case MsgType::Msg :
-            in >> s;
-            pTxtInfo->append("Server: " + s);
-            pTxtInput->clear();
-            break;
-        case MsgType::DataAnonce :
-            {
-                in >> fileName;
-                in >> fileSize;
-                // qDebug() << "Recived DataAnonce. FileName: " << fileName << " size: " << fileSize << endl;
-                pTxtInfo->append("Server: " + s + " " + QString::number(fileSize) + " bytes");
-                pTxtInput->clear();
-                slotSendToServer(MsgType::DataRequest, {fileName, 0, qMin(fileSize, blockSize)});
-                time.start();
-            }
-            break;
-        case MsgType::Data :
-            {
-                qint64 offset;
-                qint64 size;
-                in >> offset >> size;
-                // qDebug() << "Recived data. Size: " << size << endl;
-
-                QBuffer bufferStream(&buffer);
-                bufferStream.open(QIODevice::Append);
-                // bufferStream.seek(offset);
-                QByteArray b;
-                in >> b;
-                bufferStream.write(b);
-                progressBar->setValue((offset + size) * 100 / fileSize);
-                if(buffer.size() == fileSize) {
-                    int t = time.elapsed();
-                    labelSpeed->setText("<H3>Speed: " + QString::number(fileSize/t) + " KB/s</H3>");
-                    QFile file(fileName);
-                    file.open(QIODevice::WriteOnly);
-                    file.write(buffer);
-                    file.close();
-                    buffer.clear();
-                    fileName.clear();
-                    fileSize = 0;
-                    slotSendToServer(MsgType::DownloadAck);
-
-                    break;
-                }
-                slotSendToServer(MsgType::DataRequest, {fileName,
-                                                        buffer.size(),
-                                                        qMin(fileSize - buffer.size(),
-                                                        blockSize)});
-            }
-            break;
-        case MsgType::Alive :
-            slotSendToServer(MsgType::AckAlive);
-            break;
-        case MsgType::AckAlive :
-            aliveCounter = 0;
-            break;
-        default:
-            pTxtInfo->append("Unknown response");
+        processRecivedData(SocketType::TCP, in);
+        nextBlockSize = 0;
+        break;
     }
-
-    nextBlockSize = 0;
-
-    break;
-    }
-    connect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadyRead()));
+    connect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadTcpSocket()));
 }
-// ----------------------------------------------------------------------
+void MyClient::slotReadUdpSocket()
+{
+//    qDebug () << "slotReadUdpSocket()";
+    while (pUdpSocket->hasPendingDatagrams()) {
+        QNetworkDatagram datagram = pUdpSocket->receiveDatagram();
+//        udpSenderAddress = datagram.destinationAddress();
+//        udpSenderPort    = datagram.destinationPort();
+        QDataStream in(datagram.data());
+        in.setVersion(QDataStream::Qt_5_9);
+        quint16 size;
+        in >> size;
+        processRecivedData(SocketType::UDP, in);
+    }
+}
 void MyClient::slotError(QAbstractSocket::SocketError err)
 {
     QString strError = 
@@ -222,8 +183,7 @@ void MyClient::slotError(QAbstractSocket::SocketError err)
                     );
     pTxtInfo->append(strError);
 }
-
-void MyClient::slotSendToServer(MyClient::MsgType type, QList<QVariant> args)
+void MyClient::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args)
 {
     QByteArray  arrBlock;
     QDataStream out(&arrBlock, QIODevice::WriteOnly);
@@ -266,14 +226,114 @@ void MyClient::slotSendToServer(MyClient::MsgType type, QList<QVariant> args)
             out << qint8(MsgType::AckAlive);
             break;
     }
-
     out.device()->seek(0);
     out << quint16(arrBlock.size() - sizeof(quint16));
-
-    pTcpSocket->write(arrBlock);
-    // pTxtInput->setText("");
+    if(socketType == SocketType::TCP) {
+        pTcpSocket->write(arrBlock);
+    } else {
+        pUdpSocket->writeDatagram(arrBlock, QHostAddress("127.0.0.1"), udpServerPort);
+    }
 }
-// ----------------------------------------------------------------------
+void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
+{
+    QString s;
+    qint8 respType;
+    in >> respType;
+    switch (respType)
+    {
+        case MsgType::Sync :
+            {
+                int resiveId;
+                in >> resiveId;
+                qDebug () << "resived Id = " << resiveId << endl;
+                if(id != resiveId) {
+                    id = resiveId;
+                    pTxtInfo->append("Server has assigned you new client ID: " + QString::number(id));
+                }
+                else
+                    pTxtInfo->append("The server has confirmed your client ID: " + QString::number(id));
+
+                QFile file(options_file_name);
+                if(!file.open(QIODevice::WriteOnly)) {
+                    pTxtInfo->append("Cannot write client id to options file. File open error.");
+                }
+                file.write((char *)&id, sizeof(id));
+                file.close();
+            }
+            break;
+        case MsgType::Echo :
+            in >> s;
+            pTxtInfo->append("Server: " + s);
+            pTxtInput->clear();
+            break;
+        case MsgType::Time :
+            {
+            QTime time;
+            in >> time;
+            pTxtInfo->append("Server: " + time.toString());
+            pTxtInput->clear();
+            break;
+            }
+        case MsgType::Msg :
+            in >> s;
+            pTxtInfo->append("Server: " + s);
+            pTxtInput->clear();
+            break;
+        case MsgType::DataAnonce :
+            {
+                in >> fileName;
+                in >> fileSize;
+                // qDebug() << "Recived DataAnonce. FileName: " << fileName << " size: " << fileSize << endl;
+                pTxtInfo->append("Server: " + s + " " + QString::number(fileSize) + " bytes");
+                pTxtInput->clear();
+                sendMsg(soketType, MsgType::DataRequest, {fileName, 0, qMin(fileSize, blockSize)});
+                time.start();
+            }
+            break;
+        case MsgType::Data :
+            {
+                qint64 offset;
+                qint64 size;
+                in >> offset >> size;
+                // qDebug() << "Recived data. Size: " << size << endl;
+
+                QBuffer bufferStream(&buffer);
+                bufferStream.open(QIODevice::Append);
+                // bufferStream.seek(offset);
+                QByteArray b;
+                in >> b;
+                bufferStream.write(b);
+                progressBar->setValue((offset + size) * 100 / fileSize);
+                if(buffer.size() == fileSize) {
+                    int t = time.elapsed();
+                    labelSpeed->setText("<H3>Speed: " + QString::number(fileSize/t) + " KB/s</H3>");
+                    QFile file(fileName);
+                    file.open(QIODevice::WriteOnly);
+                    file.write(buffer);
+                    file.close();
+                    buffer.clear();
+                    fileName.clear();
+                    fileSize = 0;
+                    sendMsg(soketType, MsgType::DownloadAck);
+
+                    break;
+                }
+                sendMsg(soketType, MsgType::DataRequest, {fileName,
+                                                        buffer.size(),
+                                                        qMin(fileSize - buffer.size(),
+                                                        blockSize)});
+            }
+            break;
+        case MsgType::Alive :
+            sendMsg(SocketType::TCP, MsgType::AckAlive);
+            break;
+        case MsgType::AckAlive :
+            aliveCounter = 0;
+            break;
+        default:
+            pTxtInfo->append("Unknown response");
+    }
+}
 void MyClient::parseInput()
 {
     QList<QVariant> args;
@@ -285,48 +345,43 @@ void MyClient::parseInput()
     QString cmd = s.mid(0, i);
     args.append(s.mid(i + 1));
 
-
     if(cmd == "ECHO")
-        slotSendToServer(MsgType::Echo, args);
+        sendMsg(currentSocketType, MsgType::Echo, args);
     else if (cmd == "TIME")
-        slotSendToServer(MsgType::Time);
+        sendMsg(currentSocketType, MsgType::Time);
     else if (cmd == "CLOSE")
-        slotSendToServer(MsgType::Close);
+        sendMsg(currentSocketType, MsgType::Close);
     else if (cmd == "DOWNLOAD")
-        slotSendToServer(MsgType::Download, args);
+        sendMsg(currentSocketType, MsgType::Download, args);
     else
         pTxtInfo->append("Unknown command!");
 }
-
-// ------------------------------------------------------------------
 void MyClient::slotConnected()
 {
     // m_ptxtInfo->append("Received the connected() signal");
-    slotSendToServer(MsgType::Sync);
+    sendMsg(SocketType::TCP, MsgType::Sync);
     // aliveTimer->start();
 }
-
 void MyClient::slotConnectToHost()
 {
     pTcpSocket = new QTcpSocket(this);
-    QString strHost = pTxtIp->text();
-    int nPort = pTxtPort->text().toInt();
+    QString strHost = pTxtTcpIp->text();
+    int nPort = pTxtTcpPort->text().toInt();
 //    qDebug () << "strHost: " << strHost << ", port: " << nPort;
     pTcpSocket->connectToHost(strHost, nPort);
     connect(pTcpSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
             this, SLOT(slotConnectionStateChanged(QAbstractSocket::SocketState)));
     connect(pTcpSocket, SIGNAL(connected()), SLOT(slotConnected()));
-    connect(pTcpSocket, SIGNAL(readyRead()), SLOT(slotReadyRead()));
+    connect(pTcpSocket, SIGNAL(readyRead()), SLOT(slotReadTcpSocket()));
     connect(pTcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
             this,         SLOT(slotError(QAbstractSocket::SocketError))
            );
     bConnect->setEnabled(false);
-    pTxtIp->setEnabled(false);
-    pTxtPort->setEnabled(false);
+    pTxtTcpIp->setEnabled(false);
+    pTxtTcpPort->setEnabled(false);
     bDisconnect->setEnabled(true);
     pTxtInput->setEnabled(true);
 }
-
 void MyClient::slotDisconnectFromHost()
 {
     aliveTimer->stop();
@@ -338,10 +393,9 @@ void MyClient::slotDisconnectFromHost()
     bConnect->setEnabled(true);
     bDisconnect->setEnabled(false);
     pTxtInput->setEnabled(false);
-    pTxtIp->setEnabled(true);
-    pTxtPort->setEnabled(true);
+    pTxtTcpIp->setEnabled(true);
+    pTxtTcpPort->setEnabled(true);
 }
-
 void MyClient::slotConnectionStateChanged(QAbstractSocket::SocketState state)
 {
     switch(state){
@@ -369,7 +423,6 @@ void MyClient::slotConnectionStateChanged(QAbstractSocket::SocketState state)
         pTxtInfo->append("For internal use only.");
     }
 }
-
 void MyClient::slotAlive()
 {
     aliveCounter++;
@@ -380,9 +433,8 @@ void MyClient::slotAlive()
         slotDisconnectFromHost();
         return;
     }
-    slotSendToServer(MsgType::Alive);
+    sendMsg(SocketType::TCP, MsgType::Alive);
 }
-
 void MyClient::slotListLastCommandsStepUp()
 {
     if(listLastComands.empty())
@@ -391,7 +443,6 @@ void MyClient::slotListLastCommandsStepUp()
     if(cur_command)
         cur_command--;
 }
-
 void MyClient::slotListLastCommandsStepDown()
 {
     if(listLastComands.empty())
@@ -399,4 +450,14 @@ void MyClient::slotListLastCommandsStepDown()
     pTxtInput->setText(listLastComands[cur_command]);
     if(cur_command != listLastComands.size() - 1)
         cur_command++;
+}
+void MyClient::slotToogleProt()
+{
+    if(currentSocketType == SocketType::TCP){
+        bProtToogle->setText("UDP");
+        currentSocketType = SocketType::UDP;
+    } else {
+        bProtToogle->setText("TCP");
+        currentSocketType = SocketType::TCP;
+    }
 }

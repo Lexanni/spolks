@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QTcpSocket>
+#include <QUdpSocket>
 #include <QLabel>
 #include <QList>
 #include <QBuffer>
@@ -11,6 +12,8 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QShortcut>
+#include <QNetworkDatagram>
+#include <QGroupBox>
 
 class QTextEdit;
 class QLineEdit;
@@ -20,10 +23,14 @@ class MyClient : public QWidget {
 Q_OBJECT
 private:
     QTcpSocket* pTcpSocket;
+    QUdpSocket* pUdpSocket;
     QTextEdit*  pTxtInfo;
     QLineEdit*  pTxtInput;
-    QLineEdit*  pTxtIp;
-    QLineEdit*  pTxtPort;
+    QLineEdit*  pTxtTcpIp;
+    QLineEdit*  pTxtTcpPort;
+    QLineEdit*  pTxtUdpIp;
+    QLineEdit*  pTxtUdpPort;
+    QLineEdit*  pTxtUdpMyPort;
     quint16     nextBlockSize;
     qint32      id = 0;
     qint64      fileSize;
@@ -31,6 +38,10 @@ private:
     QString     fileName;
     QByteArray  buffer;
     const qint64 blockSize = 64000;
+    QHostAddress udpServerAddress;
+    quint16      udpServerPort;
+    QHostAddress udpMyAddress;
+    quint16      udpMyPort;
 
     QLabel *    labelSpeed;
     QProgressBar * progressBar;
@@ -40,6 +51,9 @@ private:
 
     QPushButton* bConnect;
     QPushButton* bDisconnect;
+    QPushButton * bBind;
+    QPushButton * bUnbind;
+    QPushButton * bProtToogle;
 
     QString     options_file_name = "client_options";
     QList<QString> listLastComands;
@@ -62,8 +76,11 @@ private:
         Alive,
         AckAlive
     };
-
-
+    enum SocketType {
+        TCP,
+        UDP
+    };
+    SocketType   currentSocketType = SocketType::UDP;
 public:
     MyClient(QWidget* pwgt = 0);
     ~MyClient();
@@ -73,9 +90,13 @@ signals:
     void downloadFinished();
 
 private slots:
-    void slotReadyRead();
+    void slotReadTcpSocket();
+    void slotReadUdpSocket();
+    void slotBind();
+    void slotUnbind();
     void slotError(QAbstractSocket::SocketError);
-    void slotSendToServer(MsgType type, QList<QVariant> args = QList<QVariant>());
+    void sendMsg(SocketType socketType, MsgType type, QList<QVariant> args = QList<QVariant>());
+    void processRecivedData(SocketType soketType, QDataStream &in);
     void parseInput();
     void slotConnected();
     void slotConnectToHost();
@@ -84,4 +105,5 @@ private slots:
     void slotAlive();
     void slotListLastCommandsStepUp();
     void slotListLastCommandsStepDown();
+    void slotToogleProt();
 };

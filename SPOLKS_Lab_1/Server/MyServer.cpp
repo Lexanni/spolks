@@ -165,7 +165,6 @@ void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
     } else {
         pUdpSocket->writeDatagram(arrBlock, udpSenderAddress, udpSenderPort);
     }
-
 }
 void MyServer::slotDisconnected()
 {
@@ -218,7 +217,6 @@ void MyServer::slotBind()
     bUnbind->setEnabled(true);
     pTxtUdpPort->setEnabled(false);
 }
-
 void MyServer::slotUnbind()
 {
     disconnect(pUdpSocket, SIGNAL(readyRead()),
@@ -230,13 +228,16 @@ void MyServer::slotUnbind()
 }
 void MyServer::slotReadUdpSocket()
 {
+//    qDebug () << "slotReadUdpSocket";
     while (pUdpSocket->hasPendingDatagrams()) {
         QNetworkDatagram datagram = pUdpSocket->receiveDatagram();
-        udpSenderAddress = datagram.destinationAddress();
-        udpSenderPort    = datagram.destinationPort();
+        udpSenderAddress = datagram.senderAddress();
+        udpSenderPort    = datagram.senderPort();
+//        qDebug() << "datagram.destinationAddress()" << udpSenderAddress;
+//        qDebug() << "datagram.destinationPort()"    << udpSenderPort;
         QDataStream in(datagram.data());
         in.setVersion(QDataStream::Qt_5_9);
-        quint8 size;
+        qint16 size;
         in >> size;
         processRecivedData(SocketType::UDP, in);
     }
