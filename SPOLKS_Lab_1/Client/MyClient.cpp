@@ -27,8 +27,6 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
 
     QPushButton* pcmd = new QPushButton("&Send");
     connect(pcmd, SIGNAL(clicked()), SLOT(parseInput()));
-    bProtToogle = new QPushButton("UDP");
-    connect(bProtToogle, SIGNAL(clicked()), this, SLOT(slotToogleProt()));
     // Speed
     labelSpeed = new QLabel("<H3>Speed</H3>");
     progressBar = new QProgressBar();
@@ -47,13 +45,11 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     bDisconnect->setEnabled(false);
 
     QHBoxLayout* tcpPortLayout = new QHBoxLayout();
-    tcpPortLayout->addWidget(new QLabel("TCP: Server IP:"));
+    tcpPortLayout->addWidget(new QLabel("TCP: Server IP:"), 1);
     tcpPortLayout->addWidget(pTxtTcpIp, 1);
-    tcpPortLayout->addWidget(new QLabel("Server port:"));
+    tcpPortLayout->addWidget(new QLabel("Server port:"), 1);
     tcpPortLayout->addWidget(pTxtTcpPort, 1);
-    tcpPortLayout->addWidget(new QLabel("Protocol:"));
-    tcpPortLayout->addWidget(bProtToogle, 1);
-    tcpPortLayout->addWidget(bConnect, 1);
+    tcpPortLayout->addWidget(bConnect, 2);
     tcpPortLayout->addWidget(bDisconnect, 1);
 
     connect(bConnect,    SIGNAL(clicked()), this, SLOT(slotConnectToHost()));
@@ -74,9 +70,9 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     bUnbind->setEnabled(false);
 
     QHBoxLayout* udpPortLayout = new QHBoxLayout();
-    udpPortLayout->addWidget(new QLabel("UDP: Server IP:"));
+    udpPortLayout->addWidget(new QLabel("UDP: Server IP:"), 1);
     udpPortLayout->addWidget(pTxtUdpIp, 1);
-    udpPortLayout->addWidget(new QLabel("Server port:"));
+    udpPortLayout->addWidget(new QLabel("Server port:"), 1);
     udpPortLayout->addWidget(pTxtUdpPort, 1);
     udpPortLayout->addWidget(new QLabel("My port: "));
     udpPortLayout->addWidget(pTxtUdpMyPort, 1);
@@ -86,11 +82,25 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     connect(bBind  , SIGNAL(clicked()), this, SLOT(slotBind())  );
     connect(bUnbind, SIGNAL(clicked()), this, SLOT(slotUnbind()));
 
+    bProtToogle = new QPushButton("UDP");
+    connect(bProtToogle, SIGNAL(clicked()), this, SLOT(slotToogleProt()));
+    pMTU = new QSpinBox;
+    pMTU->setRange(1000, 65000);
+    pMTU->setValue(65000);
+    pMTU->setSingleStep(1000);
+
+    QHBoxLayout* paramsLayout = new QHBoxLayout;
+    paramsLayout->addWidget(new QLabel("Protocol:"));
+    paramsLayout->addWidget(bProtToogle, 1);
+    paramsLayout->addWidget(new QLabel("MTU:"));
+    paramsLayout->addWidget(pMTU, 1);
+
     //Layout setup
     QVBoxLayout* pvbxLayout = new QVBoxLayout;
     pvbxLayout->addWidget(new QLabel("<H1>Client</H1>"));
     pvbxLayout->addLayout(tcpPortLayout);
     pvbxLayout->addLayout(udpPortLayout);
+    pvbxLayout->addLayout(paramsLayout);
     pvbxLayout->addWidget(pTxtInfo);
     pvbxLayout->addWidget(labelSpeed);
     pvbxLayout->addWidget(progressBar);
@@ -107,7 +117,6 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
 //    connect(pKeyDown, SIGNAL(activated()), this, SLOT(slotListLastCommandsStepDown()));
 //    connect(pKeyEnter, SIGNAL(activated()), this, SLOT(parseInput()));
 
-
     QFile file(options_file_name);
     if(file.open(QIODevice::ReadOnly)) {
         pTxtInfo->append("Client ID was readed from options file.");
@@ -118,7 +127,7 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     aliveTimer = new QTimer();
     aliveTimer->setInterval(2000);
     connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
-
+    this->adjustSize();
 }
 void MyClient::slotBind()
 {
@@ -230,11 +239,12 @@ void MyClient::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
             break;
         case MsgType::DataRequest :
             {
-                QString a1 = args.first().toString();
-                qint64  a2 = args.at(1).toLongLong();
-                qint64  a3 = args.at(2).toLongLong();
+                QString fileName = args.first().toString();
+                qint64  offset = args.at(1).toLongLong();
+                qint64  size = args.at(2).toLongLong();
+                qint64  mtu = args.at(3).toLongLong();
 
-                out << qint8(MsgType::DataRequest) << a1 << a2 << a3;
+                out << qint8(MsgType::DataRequest) << fileName << offset << size << mtu;
             }
             break;
         case MsgType::DownloadAck :
@@ -313,7 +323,7 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
                 labelSpeed->setText("<H3>" + QString::number(recivedBytes) +
                                     "/" + QString::number(fileSize) + " bytes. Speed: " +
                                     QString::number(0.0, 'f', 2) + " MB/s </H3>");
-                sendMsg(soketType, MsgType::DataRequest, {fileName, 0, fileSize});
+                sendMsg(soketType, MsgType::DataRequest, {fileName, 0, fileSize, (qint64)pMTU->value()});
                 time.start();
             }
             break;

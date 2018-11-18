@@ -3,14 +3,11 @@
 #include <QFile>
 #include "MyServer.h"
 
-// ----------------------------------------------------------------------
 MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
                                                     , nextBlockSize(0)
 {
     pTcpServer = new QTcpServer(this);
-    connect(pTcpServer, SIGNAL(newConnection()),
-            this,         SLOT(slotNewConnection())
-           );
+    connect(pTcpServer, SIGNAL(newConnection()), this, SLOT(slotNewConnection()));
 
     pTxt = new QTextEdit;
     pTxt->setReadOnly(true);
@@ -52,9 +49,7 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
     aliveTimer->setInterval(1777);
     connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
 }
-
-// ----------------------------------------------------------------------
-/*virtual*/ void MyServer::slotNewConnection()
+void MyServer::slotNewConnection()
 {
     if(countClients == 0){
         pTcpSocket = pTcpServer->nextPendingConnection();
@@ -82,8 +77,6 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
         delete pDiscardSocket;
     }
 }
-
-// ----------------------------------------------------------------------
 void MyServer::slotReadTcpSocket()
 {
     QTcpSocket* pSocket = (QTcpSocket*)sender();
@@ -107,8 +100,6 @@ void MyServer::slotReadTcpSocket()
     }
     connect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadTcpSocket()));
 }
-
-// ----------------------------------------------------------------------
 void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args)
 {
     QByteArray  arrBlock;
@@ -150,39 +141,29 @@ void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
                 buffStream.open(QIODevice::ReadOnly);
                 qint64 offset = args.at(0).toLongLong();
                 qint64 size = args.at(1).toLongLong();
-                if(offset == 0 && size == buffer.size())
+                qint64 blockSize = baseBlockSize;
+                while(offset < size)
                 {
-                    qint64 blockSize = 65000;
-                    qint64 bufferSize = buffer.size();
-                    qint64 offset = 0;
-                    while(offset < bufferSize)
-                    {
-                        blockSize = (bufferSize - offset > blockSize) ? blockSize : (bufferSize - offset);
-                        QByteArray  arrBlock;
-                        QDataStream out(&arrBlock, QIODevice::WriteOnly);
-                        out.setVersion(QDataStream::Qt_5_9);
-                        out << quint16(0);
-                        out << qint8(MsgType::Data) << offset << blockSize;
+                    blockSize = (size - offset > blockSize) ? blockSize : (size - offset);
+                    QByteArray  arrBlock;
+                    QDataStream out(&arrBlock, QIODevice::WriteOnly);
+                    out.setVersion(QDataStream::Qt_5_9);
+                    out << quint16(0);
+                    out << qint8(MsgType::Data) << offset << blockSize;
 
-                        buffStream.seek(offset);
-                        out << buffStream.read(blockSize);
-                        out.device()->seek(0);
-                        out << quint16(arrBlock.size() - sizeof(quint16));
-                        if(socketType == SocketType::TCP) {
-                            pTcpSocket->write(arrBlock);
-//                            pTcpSocket->waitForBytesWritten(10000);
-//                            qDebug () << "offset = " << offset << ", size = " << blockSize;
-                        } else {
-                            pUdpSocket->writeDatagram(arrBlock, udpSenderAddress, udpSenderPort);
-                        }
-                        offset += 65000;
+                    buffStream.seek(offset);
+                    out << buffStream.read(blockSize);
+                    out.device()->seek(0);
+                    out << quint16(arrBlock.size() - sizeof(quint16));
+                    if(socketType == SocketType::TCP) {
+                        pTcpSocket->write(arrBlock);
+                    } else {
+                        pUdpSocket->writeDatagram(arrBlock, udpSenderAddress, udpSenderPort);
                     }
-                    pTcpSocket->flush();
-                    return;
+                    offset += baseBlockSize;
                 }
-                out << qint8(MsgType::Data) << offset << size;
-                buffStream.seek(args.first().toLongLong());
-                out << buffStream.read(size);
+                pTcpSocket->flush();
+                return;
             }
             break;
         case MsgType::Alive :
@@ -335,7 +316,7 @@ void MyServer::processRecivedData(SocketType soketType, QDataStream &in)
                in >> s;
                qint64 offset;
                qint64 blockSize;
-               in >> offset >> blockSize;
+               in >> offset >> blockSize >> baseBlockSize;
                sendMsg(soketType, MsgType::Data, {offset, blockSize});
             }
             break;

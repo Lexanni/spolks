@@ -37,6 +37,7 @@ private:
     int         aliveCounter = 0;
     QHostAddress udpSenderAddress;
     quint16      udpSenderPort;
+    qint64      baseBlockSize = 64000;
 
     enum MsgType {
         Sync,

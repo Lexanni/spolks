@@ -15,6 +15,7 @@
 #include <QNetworkDatagram>
 #include <QGroupBox>
 #include <QComboBox>
+#include <QSpinBox>
 
 class QTextEdit;
 class QLineEdit;
@@ -32,6 +33,7 @@ private:
     QComboBox*  pTxtUdpIp;
     QComboBox*  pTxtUdpPort;
     QComboBox*  pTxtUdpMyPort;
+    QSpinBox*   pMTU;
     quint16     nextBlockSize;
     qint32      id = 0;
     qint64      fileSize;
