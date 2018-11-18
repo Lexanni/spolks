@@ -10,7 +10,15 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
                     , nextBlockSize(0)
 {
     pTxtInfo  = new QTextEdit;
-    pTxtInput = new QLineEdit;
+    pTxtInput = new QComboBox;
+    pTxtInput->addItems({
+                            "DOWNLOAD pt.exe",
+                            "DOWNLOAD linux.rar",
+                            "DOWNLOAD easy.zip"
+                            "ECHO Hello!",
+                            "TIME",
+                        });
+    pTxtInput->setEditable(true);
     pTxtInput->setEnabled(false);
 
     connect(pTxtInput, SIGNAL(returnPressed()),
@@ -28,17 +36,21 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     progressBar->setMinimum(0);
     progressBar->setValue(0);
     // TCP
-    pTxtTcpIp   = new QLineEdit("localhost");
-    pTxtTcpPort = new QLineEdit("2323");
+    pTxtTcpIp   = new QComboBox;
+    pTxtTcpIp->addItems({"localhost", "127.0.0.1"});
+    pTxtTcpIp->setEditable(true);
+    pTxtTcpPort = new QComboBox;
+    pTxtTcpPort->addItems({"2323", "12345"});
+    pTxtTcpPort->setEditable(true);
     bConnect    = new QPushButton("Connect");
     bDisconnect = new QPushButton("Disconnect");
     bDisconnect->setEnabled(false);
 
     QHBoxLayout* tcpPortLayout = new QHBoxLayout();
     tcpPortLayout->addWidget(new QLabel("TCP: Server IP:"));
-    tcpPortLayout->addWidget(pTxtTcpIp);
+    tcpPortLayout->addWidget(pTxtTcpIp, 1);
     tcpPortLayout->addWidget(new QLabel("Server port:"));
-    tcpPortLayout->addWidget(pTxtTcpPort);
+    tcpPortLayout->addWidget(pTxtTcpPort, 1);
     tcpPortLayout->addWidget(new QLabel("Protocol:"));
     tcpPortLayout->addWidget(bProtToogle, 1);
     tcpPortLayout->addWidget(bConnect, 1);
@@ -48,18 +60,24 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     connect(bDisconnect, SIGNAL(clicked()), this, SLOT(slotDisconnectFromHost()));
 
     // UDP
-    pTxtUdpIp     = new QLineEdit("localhost");
-    pTxtUdpPort   = new QLineEdit("12345");
-    pTxtUdpMyPort = new QLineEdit("1212");
+    pTxtUdpIp     = new QComboBox;
+    pTxtUdpIp->addItems({"127.0.0.1", "localhost", "10.0.0.1", "10.0.0.2"});
+    pTxtUdpIp->setEditable(true);
+    pTxtUdpPort   = new QComboBox;
+    pTxtUdpPort->addItems({"12345", "10000"});
+    pTxtUdpPort->setEditable(true);
+    pTxtUdpMyPort = new QComboBox;
+    pTxtUdpMyPort->addItems({"5454"});
+    pTxtUdpMyPort->setEditable(true);
     bBind    = new QPushButton("Bind");
     bUnbind  = new QPushButton("Unbind");
     bUnbind->setEnabled(false);
 
     QHBoxLayout* udpPortLayout = new QHBoxLayout();
     udpPortLayout->addWidget(new QLabel("UDP: Server IP:"));
-    udpPortLayout->addWidget(pTxtUdpIp);
+    udpPortLayout->addWidget(pTxtUdpIp, 1);
     udpPortLayout->addWidget(new QLabel("Server port:"));
-    udpPortLayout->addWidget(pTxtUdpPort);
+    udpPortLayout->addWidget(pTxtUdpPort, 1);
     udpPortLayout->addWidget(new QLabel("My port: "));
     udpPortLayout->addWidget(pTxtUdpMyPort, 1);
     udpPortLayout->addWidget(bBind, 1);
@@ -81,11 +99,13 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     setLayout(pvbxLayout);
 
     //Shortcut
-    pKeyUp = new QShortcut(Qt::Key_Up, pTxtInput);
-    pKeyDown = new QShortcut(Qt::Key_Down, pTxtInput);
+//    pKeyUp = new QShortcut(Qt::Key_Up, pTxtInput);
+//    pKeyDown = new QShortcut(Qt::Key_Down, pTxtInput);
+//    pKeyEnter = new QShortcut(Qt::Key_Enter, pTxtInput);
 
-    connect(pKeyUp,   SIGNAL(activated()), this, SLOT(slotListLastCommandsStepUp()  ));
-    connect(pKeyDown, SIGNAL(activated()), this, SLOT(slotListLastCommandsStepDown()));
+//    connect(pKeyUp,   SIGNAL(activated()), this, SLOT(slotListLastCommandsStepUp()  ));
+//    connect(pKeyDown, SIGNAL(activated()), this, SLOT(slotListLastCommandsStepDown()));
+//    connect(pKeyEnter, SIGNAL(activated()), this, SLOT(parseInput()));
 
 
     QFile file(options_file_name);
@@ -102,11 +122,11 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
 }
 void MyClient::slotBind()
 {
-    int nPort = pTxtUdpMyPort->text().toInt();
+    int nPort = pTxtUdpMyPort->currentText().toInt();
     pUdpSocket = new QUdpSocket(this);
-    pUdpSocket->bind(QHostAddress::Any, nPort);
-    udpServerAddress = QHostAddress(pTxtUdpIp->text());
-    udpServerPort    = pTxtUdpPort->text().toInt();
+    pUdpSocket->bind(nPort);
+    udpServerAddress = QHostAddress(pTxtUdpIp->currentText());
+    udpServerPort    = pTxtUdpPort->currentText().toInt();
     connect(pUdpSocket, SIGNAL(readyRead()),
             this, SLOT(slotReadUdpSocket()));
 
@@ -150,7 +170,8 @@ void MyClient::slotReadTcpSocket()
         }
         processRecivedData(SocketType::TCP, in);
         nextBlockSize = 0;
-        break;
+        if (pTcpSocket->bytesAvailable() <= 0)
+            break;
     }
     connect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadTcpSocket()));
 }
@@ -231,7 +252,7 @@ void MyClient::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
     if(socketType == SocketType::TCP) {
         pTcpSocket->write(arrBlock);
     } else {
-        pUdpSocket->writeDatagram(arrBlock, QHostAddress("127.0.0.1"), udpServerPort);
+        pUdpSocket->writeDatagram(arrBlock, udpServerAddress, udpServerPort);
     }
 }
 void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
@@ -264,20 +285,20 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
         case MsgType::Echo :
             in >> s;
             pTxtInfo->append("Server: " + s);
-            pTxtInput->clear();
+//            pTxtInput->clear();
             break;
         case MsgType::Time :
             {
             QTime time;
             in >> time;
             pTxtInfo->append("Server: " + time.toString());
-            pTxtInput->clear();
+//            pTxtInput->clear();
             break;
             }
         case MsgType::Msg :
             in >> s;
             pTxtInfo->append("Server: " + s);
-            pTxtInput->clear();
+//            pTxtInput->clear();
             break;
         case MsgType::DataAnonce :
             {
@@ -285,28 +306,41 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
                 in >> fileSize;
                 // qDebug() << "Recived DataAnonce. FileName: " << fileName << " size: " << fileSize << endl;
                 pTxtInfo->append("Server: " + s + " " + QString::number(fileSize) + " bytes");
-                pTxtInput->clear();
-                sendMsg(soketType, MsgType::DataRequest, {fileName, 0, qMin(fileSize, blockSize)});
+//                pTxtInput->clear();
+                recivedBytes = 0;
+                buffer.clear();
+                buffer.resize(fileSize);
+                labelSpeed->setText("<H3>" + QString::number(recivedBytes) +
+                                    "/" + QString::number(fileSize) + " bytes. Speed: " +
+                                    QString::number(0.0, 'f', 2) + " MB/s </H3>");
+                sendMsg(soketType, MsgType::DataRequest, {fileName, 0, fileSize});
                 time.start();
             }
             break;
         case MsgType::Data :
             {
+                int t = time.elapsed();
                 qint64 offset;
                 qint64 size;
                 in >> offset >> size;
-                // qDebug() << "Recived data. Size: " << size << endl;
-
+//                qDebug() << "offset = " << offset << "size = " << size << endl;
+                recivedBytes += size;
+                int val = recivedBytes * 100 / fileSize;
+                if(val != progressBarValue){
+                    progressBarValue = val;
+                    progressBar->setValue(val);
+                    labelSpeed->setText("<H3>" + QString::number(recivedBytes) + "/" + QString::number(fileSize) +
+                                        " bytes. Speed: " + QString::number((double)recivedBytes/(t * 1000), 'f', 2) +
+                                        " MB/s</H3>");
+                }
                 QBuffer bufferStream(&buffer);
-                bufferStream.open(QIODevice::Append);
-                // bufferStream.seek(offset);
+                bufferStream.open(QIODevice::ReadWrite);
+                bufferStream.seek(offset);
                 QByteArray b;
                 in >> b;
                 bufferStream.write(b);
-                progressBar->setValue((offset + size) * 100 / fileSize);
-                if(buffer.size() == fileSize) {
-                    int t = time.elapsed();
-                    labelSpeed->setText("<H3>Speed: " + QString::number(fileSize/t) + " KB/s</H3>");
+                if(recivedBytes == fileSize) {
+//                    qDebug() << "recivedBytes == fileSize";
                     QFile file(fileName);
                     file.open(QIODevice::WriteOnly);
                     file.write(buffer);
@@ -314,14 +348,14 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
                     buffer.clear();
                     fileName.clear();
                     fileSize = 0;
+                    recivedBytes = 0;
                     sendMsg(soketType, MsgType::DownloadAck);
-
                     break;
                 }
-                sendMsg(soketType, MsgType::DataRequest, {fileName,
-                                                        buffer.size(),
-                                                        qMin(fileSize - buffer.size(),
-                                                        blockSize)});
+//                sendMsg(soketType, MsgType::DataRequest, {fileName,
+//                                                        buffer.size(),
+//                                                        qMin(fileSize - buffer.size(),
+//                                                        blockSize)});
             }
             break;
         case MsgType::Alive :
@@ -337,10 +371,10 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
 void MyClient::parseInput()
 {
     QList<QVariant> args;
-    QString s = pTxtInput->text();
-    listLastComands.append(s);
-    cur_command = listLastComands.size() - 1;
-    pTxtInput->clear();
+    QString s = pTxtInput->currentText();
+//    listLastComands.append(s);
+//    cur_command = listLastComands.size() - 1;
+//    pTxtInput->clear();
     int i = s.indexOf(" ");
     QString cmd = s.mid(0, i);
     args.append(s.mid(i + 1));
@@ -365,8 +399,8 @@ void MyClient::slotConnected()
 void MyClient::slotConnectToHost()
 {
     pTcpSocket = new QTcpSocket(this);
-    QString strHost = pTxtTcpIp->text();
-    int nPort = pTxtTcpPort->text().toInt();
+    QString strHost = pTxtTcpIp->currentText();
+    int nPort = pTxtTcpPort->currentText().toInt();
 //    qDebug () << "strHost: " << strHost << ", port: " << nPort;
     pTcpSocket->connectToHost(strHost, nPort);
     connect(pTcpSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
@@ -435,22 +469,22 @@ void MyClient::slotAlive()
     }
     sendMsg(SocketType::TCP, MsgType::Alive);
 }
-void MyClient::slotListLastCommandsStepUp()
-{
-    if(listLastComands.empty())
-        return;
-    pTxtInput->setText(listLastComands[cur_command]);
-    if(cur_command)
-        cur_command--;
-}
-void MyClient::slotListLastCommandsStepDown()
-{
-    if(listLastComands.empty())
-        return;
-    pTxtInput->setText(listLastComands[cur_command]);
-    if(cur_command != listLastComands.size() - 1)
-        cur_command++;
-}
+//void MyClient::slotListLastCommandsStepUp()
+//{
+//    if(listLastComands.empty())
+//        return;
+//    pTxtInput->setText(listLastComands[cur_command]);
+//    if(cur_command)
+//        cur_command--;
+//}
+//void MyClient::slotListLastCommandsStepDown()
+//{
+//    if(listLastComands.empty())
+//        return;
+//    pTxtInput->setText(listLastComands[cur_command]);
+//    if(cur_command != listLastComands.size() - 1)
+//        cur_command++;
+//}
 void MyClient::slotToogleProt()
 {
     if(currentSocketType == SocketType::TCP){

@@ -86,20 +86,26 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
 // ----------------------------------------------------------------------
 void MyServer::slotReadTcpSocket()
 {
-    QTcpSocket* pClientSocket = (QTcpSocket*)sender();
-    QDataStream in(pClientSocket);
+    QTcpSocket* pSocket = (QTcpSocket*)sender();
+    disconnect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadTcpSocket()));
+    QDataStream in(pSocket);
     in.setVersion(QDataStream::Qt_5_9);
-    if (!nextBlockSize) {
-        if (pClientSocket->bytesAvailable() < (int)sizeof(quint16)) {
-            return;
+    forever {
+        if (!nextBlockSize) {
+            if (pTcpSocket->bytesAvailable() < (int)sizeof(quint16)) {
+                break;
+            }
+            in >> nextBlockSize;
         }
-        in >> nextBlockSize;
+        if (pTcpSocket->bytesAvailable() < nextBlockSize) {
+            break;
+        }
+        processRecivedData(SocketType::TCP, in);
+        nextBlockSize = 0;
+        if (pTcpSocket->bytesAvailable() <= 0)
+            break;
     }
-    if (pClientSocket->bytesAvailable() < nextBlockSize) {
-        return;
-    }
-    processRecivedData(SocketType::TCP, in);
-    nextBlockSize = 0;
+    connect(pSocket, SIGNAL(readyRead()), this, SLOT(slotReadTcpSocket()));
 }
 
 // ----------------------------------------------------------------------
@@ -128,6 +134,7 @@ void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
             out << qint8(MsgType::Msg) << args.first().toString();
             break;
         case MsgType::DataAnonce :
+            buffer.clear();
             file.setFileName(args.first().toString());
             if(!file.open(QIODevice::ReadOnly)){
                 qDebug () << "File don't open!" << endl;
@@ -143,6 +150,36 @@ void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
                 buffStream.open(QIODevice::ReadOnly);
                 qint64 offset = args.at(0).toLongLong();
                 qint64 size = args.at(1).toLongLong();
+                if(offset == 0 && size == buffer.size())
+                {
+                    qint64 blockSize = 65000;
+                    qint64 bufferSize = buffer.size();
+                    qint64 offset = 0;
+                    while(offset < bufferSize)
+                    {
+                        blockSize = (bufferSize - offset > blockSize) ? blockSize : (bufferSize - offset);
+                        QByteArray  arrBlock;
+                        QDataStream out(&arrBlock, QIODevice::WriteOnly);
+                        out.setVersion(QDataStream::Qt_5_9);
+                        out << quint16(0);
+                        out << qint8(MsgType::Data) << offset << blockSize;
+
+                        buffStream.seek(offset);
+                        out << buffStream.read(blockSize);
+                        out.device()->seek(0);
+                        out << quint16(arrBlock.size() - sizeof(quint16));
+                        if(socketType == SocketType::TCP) {
+                            pTcpSocket->write(arrBlock);
+//                            pTcpSocket->waitForBytesWritten(10000);
+//                            qDebug () << "offset = " << offset << ", size = " << blockSize;
+                        } else {
+                            pUdpSocket->writeDatagram(arrBlock, udpSenderAddress, udpSenderPort);
+                        }
+                        offset += 65000;
+                    }
+                    pTcpSocket->flush();
+                    return;
+                }
                 out << qint8(MsgType::Data) << offset << size;
                 buffStream.seek(args.first().toLongLong());
                 out << buffStream.read(size);

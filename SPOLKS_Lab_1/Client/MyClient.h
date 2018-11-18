@@ -14,6 +14,7 @@
 #include <QShortcut>
 #include <QNetworkDatagram>
 #include <QGroupBox>
+#include <QComboBox>
 
 class QTextEdit;
 class QLineEdit;
@@ -25,19 +26,20 @@ private:
     QTcpSocket* pTcpSocket;
     QUdpSocket* pUdpSocket;
     QTextEdit*  pTxtInfo;
-    QLineEdit*  pTxtInput;
-    QLineEdit*  pTxtTcpIp;
-    QLineEdit*  pTxtTcpPort;
-    QLineEdit*  pTxtUdpIp;
-    QLineEdit*  pTxtUdpPort;
-    QLineEdit*  pTxtUdpMyPort;
+    QComboBox*  pTxtInput;
+    QComboBox*  pTxtTcpIp;
+    QComboBox*  pTxtTcpPort;
+    QComboBox*  pTxtUdpIp;
+    QComboBox*  pTxtUdpPort;
+    QComboBox*  pTxtUdpMyPort;
     quint16     nextBlockSize;
     qint32      id = 0;
     qint64      fileSize;
-//    qint64      resiveBytes;
+    qint64      recivedBytes;
+    int         progressBarValue = 0;
     QString     fileName;
     QByteArray  buffer;
-    const qint64 blockSize = 64000;
+    const qint64 blockSize = 65000;
     QHostAddress udpServerAddress;
     quint16      udpServerPort;
     QHostAddress udpMyAddress;
@@ -56,10 +58,11 @@ private:
     QPushButton * bProtToogle;
 
     QString     options_file_name = "client_options";
-    QList<QString> listLastComands;
-    int         cur_command;
-    QShortcut   *pKeyUp;
-    QShortcut   *pKeyDown;
+//    QList<QString> listLastComands;
+//    int         cur_command;
+//    QShortcut   *pKeyUp;
+//    QShortcut   *pKeyDown;
+//    QShortcut    *pKeyEnter;
 
 
     enum MsgType {
@@ -103,7 +106,7 @@ private slots:
     void slotDisconnectFromHost();
     void slotConnectionStateChanged(QAbstractSocket::SocketState state);
     void slotAlive();
-    void slotListLastCommandsStepUp();
-    void slotListLastCommandsStepDown();
+//    void slotListLastCommandsStepUp();
+//    void slotListLastCommandsStepDown();
     void slotToogleProt();
 };
