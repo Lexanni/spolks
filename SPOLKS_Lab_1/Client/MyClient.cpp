@@ -14,7 +14,8 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     pTxtInput->addItems({
                             "DOWNLOAD pt.exe",
                             "DOWNLOAD linux.rar",
-                            "DOWNLOAD easy.zip"
+                            "DOWNLOAD easy.zip",
+                            "DOWNLOAD unlocker.exe",
                             "ECHO Hello!",
                             "TIME",
                         });
@@ -35,7 +36,7 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     progressBar->setValue(0);
     // TCP
     pTxtTcpIp   = new QComboBox;
-    pTxtTcpIp->addItems({"localhost", "127.0.0.1"});
+    pTxtTcpIp->addItems({"localhost", "127.0.0.1", "10.0.0.1", "10.0.0.2"});
     pTxtTcpIp->setEditable(true);
     pTxtTcpPort = new QComboBox;
     pTxtTcpPort->addItems({"2323", "12345"});
@@ -85,9 +86,9 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     bProtToogle = new QPushButton("UDP");
     connect(bProtToogle, SIGNAL(clicked()), this, SLOT(slotToogleProt()));
     pMTU = new QSpinBox;
-    pMTU->setRange(1000, 65000);
-    pMTU->setValue(65000);
-    pMTU->setSingleStep(1000);
+    pMTU->setRange(100, 65000);
+    pMTU->setValue(100);
+    pMTU->setSingleStep(100);
 
     QHBoxLayout* paramsLayout = new QHBoxLayout;
     paramsLayout->addWidget(new QLabel("Protocol:"));
@@ -187,6 +188,7 @@ void MyClient::slotReadTcpSocket()
 void MyClient::slotReadUdpSocket()
 {
 //    qDebug () << "slotReadUdpSocket()";
+    disconnect(pUdpSocket, SIGNAL(readyRead()), this, SLOT(slotReadUdpSocket()));
     while (pUdpSocket->hasPendingDatagrams()) {
         QNetworkDatagram datagram = pUdpSocket->receiveDatagram();
 //        udpSenderAddress = datagram.destinationAddress();
@@ -197,6 +199,7 @@ void MyClient::slotReadUdpSocket()
         in >> size;
         processRecivedData(SocketType::UDP, in);
     }
+    connect(pUdpSocket, SIGNAL(readyRead()), this, SLOT(slotReadUdpSocket()));
 }
 void MyClient::slotError(QAbstractSocket::SocketError err)
 {
@@ -321,7 +324,7 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
                 buffer.clear();
                 buffer.resize(fileSize);
                 labelSpeed->setText("<H3>" + QString::number(recivedBytes) +
-                                    "/" + QString::number(fileSize) + " bytes. Speed: " +
+                                    "/" + QString::number(fileSize) + " bytes. Average speed: " +
                                     QString::number(0.0, 'f', 2) + " MB/s </H3>");
                 sendMsg(soketType, MsgType::DataRequest, {fileName, 0, fileSize, (qint64)pMTU->value()});
                 time.start();
@@ -340,7 +343,7 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
                     progressBarValue = val;
                     progressBar->setValue(val);
                     labelSpeed->setText("<H3>" + QString::number(recivedBytes) + "/" + QString::number(fileSize) +
-                                        " bytes. Speed: " + QString::number((double)recivedBytes/(t * 1000), 'f', 2) +
+                                        " bytes. Average speed: " + QString::number((double)recivedBytes/(t * 1000), 'f', 2) +
                                         " MB/s</H3>");
                 }
                 QBuffer bufferStream(&buffer);

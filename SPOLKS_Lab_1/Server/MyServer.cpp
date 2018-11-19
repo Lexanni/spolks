@@ -159,6 +159,7 @@ void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
                         pTcpSocket->write(arrBlock);
                     } else {
                         pUdpSocket->writeDatagram(arrBlock, udpSenderAddress, udpSenderPort);
+//                        qDebug() << "offset = " << offset << ", blockSize = " << blockSize;
                     }
                     offset += baseBlockSize;
                 }
