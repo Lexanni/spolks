@@ -75,6 +75,7 @@ private:
         Download,
         Msg,
         Data,
+        DataAck,
         DataAnonce,
         DataRequest,
         DownloadAck,

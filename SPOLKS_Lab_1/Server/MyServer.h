@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QUdpSocket>
+#include <QTime>
 
 class MyServer : public QWidget {
 Q_OBJECT
@@ -24,10 +25,14 @@ private:
     QLineEdit*  pTxtTcpPort;
     QLineEdit*  pTxtUdpPort;
     quint16     nextBlockSize;
+    qint64      blockNumber = 0;
     int         countClients = 0;
     int         curClientId  = 100500;
     QFile       file;
     QString     fileName;
+    qint64      offset;
+    qint64      blockSize;
+    qint64      dataSize;
     QByteArray  buffer;
     QPushButton * bListen;
     QPushButton * bResume;
@@ -38,6 +43,13 @@ private:
     QHostAddress udpSenderAddress;
     quint16      udpSenderPort;
     qint64      baseBlockSize = 64000;
+    QVector<qint64>     acks;
+    int         windowSize = 4;
+    int         ackCounter = 0;
+    int         rrt_time;
+    QTime       time;
+    QTimer      * sendingTimer;
+    bool        boost = true;
 
     enum MsgType {
         Sync,
@@ -47,6 +59,7 @@ private:
         Download,
         Msg,
         Data,
+        DataAck,
         DataAnonce,
         DataRequest,
         DownloadAck,
@@ -76,5 +89,6 @@ public slots:
             void slotUnbind();
             void slotReadTcpSocket();
             void slotReadUdpSocket();
+            void slotSendData();
 };
 

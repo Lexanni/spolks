@@ -250,6 +250,11 @@ void MyClient::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
                 out << qint8(MsgType::DataRequest) << fileName << offset << size << mtu;
             }
             break;
+        case MsgType::DataAck :
+            {
+                out << qint8(MsgType::DataAck) << args.first().toLongLong();
+            }
+            break;
         case MsgType::DownloadAck :
             out << qint8(MsgType::DownloadAck);
             break;
@@ -335,7 +340,8 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
                 int t = time.elapsed();
                 qint64 offset;
                 qint64 size;
-                in >> offset >> size;
+                qint64 blockNumber;
+                in >> offset >> size >> blockNumber;
 //                qDebug() << "offset = " << offset << "size = " << size << endl;
                 recivedBytes += size;
                 int val = recivedBytes * 100 / fileSize;
@@ -369,6 +375,7 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
 //                                                        buffer.size(),
 //                                                        qMin(fileSize - buffer.size(),
 //                                                        blockSize)});
+                sendMsg(soketType, MsgType::DataAck, {blockNumber});
             }
             break;
         case MsgType::Alive :
