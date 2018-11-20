@@ -267,18 +267,17 @@ void MyServer::slotReadUdpSocket()
 }
 void MyServer::slotSendData()
 {
-    qDebug () << "slotSendData()";
+    // qDebug () << "slotSendData()";
     sendingTimer->stop();
     if(ackCounter > 0) {
         boost = false;
-        // windowSize = windowSize >> 1;
-        windowSize = windowSize - ackCounter;
+        windowSize = windowSize >> 1;
+        // windowSize = windowSize - ackCounter;
     } else if (boost)
         windowSize = windowSize << 1;
     else
         windowSize += 1;
-
-    qDebug () << "windowSize = " << windowSize;
+//    qDebug () << "windowSize = " << windowSize;
     QBuffer buffStream(&buffer);
     buffStream.open(QIODevice::ReadOnly);
     qint64 blockSize = baseBlockSize;
@@ -305,7 +304,6 @@ void MyServer::slotSendData()
         blockNumber++;
         offset += baseBlockSize;
     }
-    pTcpSocket->flush();
     sendingTimer->start(1);
 }
 void MyServer::processRecivedData(SocketType soketType, QDataStream &in)
