@@ -24,10 +24,12 @@ private:
     QTextEdit*  pTxt;
     QLineEdit*  pTxtTcpPort;
     QLineEdit*  pTxtUdpPort;
-    quint16     nextBlockSize;
+    quint16     nextBlockSize = 0;
     qint64      blockNumber = 0;
+    qint64      ackPartLast = 0;
     int         countClients = 0;
     int         curClientId  = 100500;
+    int         attemptCounter = 0;
     QFile       file;
     QString     fileName;
     qint64      offset;
@@ -49,6 +51,7 @@ private:
     int         rrt_time;
     QTime       time;
     QTimer      * sendingTimer;
+    QTimer      * sendLostTimer;
     bool        boost = true;
 
     enum MsgType {
@@ -57,12 +60,14 @@ private:
         Time,
         Close,
         Download,
+        ContinueDownloading,
         Msg,
         Data,
         DataAck,
         DataAnonce,
         DataRequest,
         DownloadAck,
+        DownloadFin,
         Alive,
         AckAlive
     };
@@ -90,5 +95,6 @@ public slots:
             void slotReadTcpSocket();
             void slotReadUdpSocket();
             void slotSendData();
+            void slotSendLost();
 };
 

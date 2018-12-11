@@ -5,9 +5,7 @@
 #include "MyClient.h"
 
 // ----------------------------------------------------------------------
-MyClient::MyClient(QWidget*       pwgt /*=0*/
-                  ) : QWidget(pwgt)
-                    , nextBlockSize(0)
+MyClient::MyClient(QWidget* pwgt /*=0*/) : QWidget(pwgt)
 {
     pTxtInfo  = new QTextEdit;
     pTxtInput = new QComboBox;
@@ -44,17 +42,21 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     bConnect    = new QPushButton("Connect");
     bDisconnect = new QPushButton("Disconnect");
     bDisconnect->setEnabled(false);
+    bContinueDownloading = new QPushButton("Resume");
+    bContinueDownloading->setEnabled(false);
 
     QHBoxLayout* tcpPortLayout = new QHBoxLayout();
     tcpPortLayout->addWidget(new QLabel("TCP: Server IP:"), 1);
     tcpPortLayout->addWidget(pTxtTcpIp, 1);
     tcpPortLayout->addWidget(new QLabel("Server port:"), 1);
     tcpPortLayout->addWidget(pTxtTcpPort, 1);
-    tcpPortLayout->addWidget(bConnect, 2);
+    tcpPortLayout->addWidget(bContinueDownloading, 1);
+    tcpPortLayout->addWidget(bConnect, 1);
     tcpPortLayout->addWidget(bDisconnect, 1);
 
     connect(bConnect,    SIGNAL(clicked()), this, SLOT(slotConnectToHost()));
     connect(bDisconnect, SIGNAL(clicked()), this, SLOT(slotDisconnectFromHost()));
+    connect(bContinueDownloading, SIGNAL(clicked()), this, SLOT(slotContinueDownloading()));
 
     // UDP
     pTxtUdpIp     = new QComboBox;
@@ -87,7 +89,7 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
     connect(bProtToogle, SIGNAL(clicked()), this, SLOT(slotToogleProt()));
     pMTU = new QSpinBox;
     pMTU->setRange(100, 65000);
-    pMTU->setValue(100);
+    pMTU->setValue(31000);
     pMTU->setSingleStep(100);
 
     QHBoxLayout* paramsLayout = new QHBoxLayout;
@@ -118,13 +120,36 @@ MyClient::MyClient(QWidget*       pwgt /*=0*/
 //    connect(pKeyDown, SIGNAL(activated()), this, SLOT(slotListLastCommandsStepDown()));
 //    connect(pKeyEnter, SIGNAL(activated()), this, SLOT(parseInput()));
 
-    QFile file(options_file_name);
-    if(file.open(QIODevice::ReadOnly)) {
-        pTxtInfo->append("Client ID was readed from options file.");
-        file.read((char *)&id, sizeof(id));
-        file.close();
-    }
-
+//    file.setFileName(options_file_name);
+//    if(file.open(QIODevice::ReadOnly)) {
+//        pTxtInfo->append("Client ID was readed from options file.");
+//        file.read((char *)&id, sizeof(id));
+//        downloading_options = "d_" + QString::number(id);
+//        file.close();
+//    }
+//    file.setFileName(downloading_options);
+//    if(file.open(QIODevice::ReadOnly)) {
+//        pTxtInfo->append("Downloading information restored from file.");
+//        bContinueDownloading->setEnabled(true);
+//        QDataStream stream(&file);
+//        stream >> lastRecivedOffset >> fileSize >> blockSize >> recivedBytes >> fileName;
+//        recivedBlocks.resize(fileSize / blockSize + 1);
+//        recivedBlocks.fill(0);
+//        savePoint = lastRecivedOffset + savePointStep;
+//        file.close();
+//        pMTU->setValue(blockSize);
+//        file.setFileName(fileName);
+//        if(file.open(QIODevice::ReadWrite))
+//        {
+//            qDebug() << "downloading file opend";
+//            buffer = file.readAll();
+//            file.close();
+//            labelSpeed->setText("<H3>" + QString::number(recivedBytes) +
+//                                "/" + QString::number(fileSize) + " bytes. Average speed: " +
+//                                QString::number(0.0, 'f', 2) + " MB/s </H3>");
+//            progressBar->setValue(recivedBytes * 100 / fileSize);
+//        }
+//    }
     aliveTimer = new QTimer();
     aliveTimer->setInterval(2000);
     connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
@@ -145,6 +170,7 @@ void MyClient::slotBind()
     pTxtUdpPort->setEnabled(false);
     pTxtUdpMyPort->setEnabled(false);
     pTxtInput->setEnabled(true);
+    sendMsg(SocketType::UDP, MsgType::Sync);
 }
 void MyClient::slotUnbind()
 {
@@ -159,7 +185,8 @@ void MyClient::slotUnbind()
 }
 MyClient::~MyClient()
 {
-    QFile::remove(options_file_name);
+//    QFile::remove(options_file_name);
+//    QFile::remove(downloading_options);
 }
 void MyClient::slotReadTcpSocket()
 {
@@ -240,6 +267,14 @@ void MyClient::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
         case MsgType::Download :
             out << qint8(MsgType::Download) << args.first().toString();
             break;
+        case MsgType::ContinueDownloading :
+            {
+                QString fileName = args.at(0).toString();
+                qint64  offset = args.at(1).toLongLong();
+                qint64  mtu = args.at(2).toLongLong();
+                out << qint8(MsgType::ContinueDownloading) << fileName << offset << mtu;
+            }
+            break;
         case MsgType::DataRequest :
             {
                 QString fileName = args.first().toString();
@@ -253,6 +288,7 @@ void MyClient::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
         case MsgType::DataAck :
             {
                 out << qint8(MsgType::DataAck) << args.first().toLongLong();
+                // qDebug () << "DataAck: " << args.first().toLongLong();
             }
             break;
         case MsgType::DownloadAck :
@@ -273,7 +309,7 @@ void MyClient::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
         pUdpSocket->writeDatagram(arrBlock, udpServerAddress, udpServerPort);
     }
 }
-void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
+void MyClient::processRecivedData(SocketType socketType, QDataStream &in)
 {
     QString s;
     qint8 respType;
@@ -298,84 +334,153 @@ void MyClient::processRecivedData(SocketType soketType, QDataStream &in)
                 }
                 file.write((char *)&id, sizeof(id));
                 file.close();
+                downloading_options = "d_" + QString::number(id);
             }
             break;
         case MsgType::Echo :
             in >> s;
             pTxtInfo->append("Server: " + s);
-//            pTxtInput->clear();
             break;
         case MsgType::Time :
             {
             QTime time;
             in >> time;
             pTxtInfo->append("Server: " + time.toString());
-//            pTxtInput->clear();
             break;
             }
         case MsgType::Msg :
             in >> s;
             pTxtInfo->append("Server: " + s);
-//            pTxtInput->clear();
             break;
         case MsgType::DataAnonce :
             {
                 in >> fileName;
                 in >> fileSize;
+                file.setFileName(fileName);
+//                if(!file.open(QIODevice::WriteOnly))
+//                {
+//                    pTxtInfo->append("Cannot create " + fileName);
+//                    break;
+//                }
+                QFile file(downloading_options);
+                if(file.open(QIODevice::WriteOnly)) {
+                    file.write((char *)&lastRecivedOffset, sizeof(lastRecivedOffset));
+                    file.write((char *)&fileSize,  sizeof(fileSize) );
+                    file.write((char *)&blockSize, sizeof(blockSize));
+                    file.write((char *)&recivedBytes, sizeof(recivedBytes));
+                    file.write(fileName.toLocal8Bit());
+                    file.close();
+                }
+                blockSize = pMTU->value();
+                savePoint = savePointStep;
+                if(socketType == SocketType::UDP){
+                    recivedBlocks.resize(fileSize / blockSize + 1);
+                    recivedBlocks.fill(0);
+                }
                 // qDebug() << "Recived DataAnonce. FileName: " << fileName << " size: " << fileSize << endl;
                 pTxtInfo->append("Server: " + s + " " + QString::number(fileSize) + " bytes");
-//                pTxtInput->clear();
                 recivedBytes = 0;
                 buffer.clear();
                 buffer.resize(fileSize);
                 labelSpeed->setText("<H3>" + QString::number(recivedBytes) +
                                     "/" + QString::number(fileSize) + " bytes. Average speed: " +
                                     QString::number(0.0, 'f', 2) + " MB/s </H3>");
-                sendMsg(soketType, MsgType::DataRequest, {fileName, 0, fileSize, (qint64)pMTU->value()});
+                sendMsg(socketType, MsgType::DataRequest, {fileName, 0, fileSize, blockSize});
                 time.start();
             }
             break;
         case MsgType::Data :
             {
+//                qDebug () << "Data";
                 int t = time.elapsed();
                 qint64 offset;
                 qint64 size;
                 qint64 blockNumber;
                 in >> offset >> size >> blockNumber;
-//                qDebug() << "offset = " << offset << "size = " << size << endl;
-                recivedBytes += size;
-                int val = recivedBytes * 100 / fileSize;
-                if(val != progressBarValue){
-                    progressBarValue = val;
-                    progressBar->setValue(val);
-                    labelSpeed->setText("<H3>" + QString::number(recivedBytes) + "/" + QString::number(fileSize) +
-                                        " bytes. Average speed: " + QString::number((double)recivedBytes/(t * 1000), 'f', 2) +
-                                        " MB/s</H3>");
+//                 qDebug() << "offset = " << offset << "blockNumber = " << blockNumber;
+                if(socketType == SocketType::TCP || (!recivedBlocks.empty() && recivedBlocks[blockNumber] == 0)) {
+//                    qDebug () << "socketType == SocketType::TCP || recivedBlocks[blockNumber] == 0";
+                    if(socketType == SocketType::UDP) {
+                        recivedBlocks[blockNumber] = 1;
+                    }
+                    recivedBytes += size;
+
+
+                    int val = recivedBytes * 100 / fileSize;
+                    if(val != progressBarValue){
+                        progressBarValue = val;
+                        progressBar->setValue(val);
+                        labelSpeed->setText("<H3>" + QString::number(recivedBytes) + "/" + QString::number(fileSize) +
+                                            " bytes. Average speed: " + QString::number((double)recivedBytes/(t * 1000), 'f', 2) +
+                                            " MB/s</H3>");
+                    }
+                    QBuffer bufferStream(&buffer);
+                    bufferStream.open(QIODevice::ReadWrite);
+                    bufferStream.seek(offset);
+                    QByteArray b;
+                    in >> b;
+                    bufferStream.write(b);
+
+
+//                    qDebug() << "offset = " << offset << "blockNumber = " << blockNumber << "recivedBytes = " << recivedBytes;
+
+
+                    if(/*recivedBytes >= savePoint || */ recivedBytes == fileSize) {
+//                        qDebug () << "recivedBytes > savePoint || recivedBytes == fileSize";
+                        QFile file(fileName);
+                        if(file.open(QIODevice::WriteOnly)){
+                            file.write(buffer);
+                            // file.flush();
+                            file.close();
+                        } else {
+                            qDebug () << "Cannot open file";
+                            break;
+                        }
+                        QFile file_d(downloading_options);
+                        if(file_d.open(QIODevice::WriteOnly)) {
+                            QDataStream stream(&file_d);
+                            stream.setVersion(QDataStream::Qt_5_9);
+                            stream << savePoint << fileSize << blockSize << recivedBytes << fileName;
+                            file_d.close();
+                        }
+                        if(/*SocketType::TCP && */ recivedBytes == fileSize){
+//                            qDebug () << "recivedBytes == fileSize";
+//                            file.close();
+                            buffer.clear();
+                            fileName.clear();
+                            recivedBlocks.clear();
+                            fileSize = 0;
+                            recivedBytes = 0;
+                            lastRecivedOffset = 0;
+                            sendMsg(socketType, MsgType::DownloadAck);
+                            QFile::remove(downloading_options);
+                            qDebug () << "DownloadAck";
+                            bContinueDownloading->setEnabled(false);
+                        }
+
+//                        savePoint += savePointStep;
+//                        break;
+                    }
                 }
-                QBuffer bufferStream(&buffer);
-                bufferStream.open(QIODevice::ReadWrite);
-                bufferStream.seek(offset);
-                QByteArray b;
-                in >> b;
-                bufferStream.write(b);
-                if(recivedBytes == fileSize) {
-//                    qDebug() << "recivedBytes == fileSize";
-                    QFile file(fileName);
-                    file.open(QIODevice::WriteOnly);
-                    file.write(buffer);
-                    file.close();
-                    buffer.clear();
-                    fileName.clear();
-                    fileSize = 0;
-                    recivedBytes = 0;
-                    sendMsg(soketType, MsgType::DownloadAck);
-                    break;
+                if(socketType == SocketType::UDP) {
+                    sendMsg(socketType, MsgType::DataAck, {blockNumber});
                 }
-//                sendMsg(soketType, MsgType::DataRequest, {fileName,
-//                                                        buffer.size(),
-//                                                        qMin(fileSize - buffer.size(),
-//                                                        blockSize)});
-                sendMsg(soketType, MsgType::DataAck, {blockNumber});
+            }
+            break;
+        case MsgType::DownloadFin :
+            {
+                qDebug () << "DownloadFin";
+                file.close();
+                buffer.clear();
+                fileName.clear();
+                recivedBlocks.clear();
+                fileSize = 0;
+                recivedBytes = 0;
+                lastRecivedOffset = 0;
+                sendMsg(socketType, MsgType::DownloadAck);
+                QFile::remove(downloading_options);
+                qDebug () << "DownloadAck";
+                bContinueDownloading->setEnabled(false);
             }
             break;
         case MsgType::Alive :
@@ -394,7 +499,6 @@ void MyClient::parseInput()
     QString s = pTxtInput->currentText();
 //    listLastComands.append(s);
 //    cur_command = listLastComands.size() - 1;
-//    pTxtInput->clear();
     int i = s.indexOf(" ");
     QString cmd = s.mid(0, i);
     args.append(s.mid(i + 1));
@@ -428,8 +532,7 @@ void MyClient::slotConnectToHost()
     connect(pTcpSocket, SIGNAL(connected()), SLOT(slotConnected()));
     connect(pTcpSocket, SIGNAL(readyRead()), SLOT(slotReadTcpSocket()));
     connect(pTcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-            this,         SLOT(slotError(QAbstractSocket::SocketError))
-           );
+            this,         SLOT(slotError(QAbstractSocket::SocketError)));
     bConnect->setEnabled(false);
     pTxtTcpIp->setEnabled(false);
     pTxtTcpPort->setEnabled(false);
@@ -489,6 +592,28 @@ void MyClient::slotAlive()
     }
     sendMsg(SocketType::TCP, MsgType::Alive);
 }
+void MyClient::slotToogleProt()
+{
+    if(currentSocketType == SocketType::TCP){
+        bProtToogle->setText("UDP");
+        currentSocketType = SocketType::UDP;
+    } else {
+        bProtToogle->setText("TCP");
+        currentSocketType = SocketType::TCP;
+    }
+}
+void MyClient::slotContinueDownloading()
+{
+//    if(!file.isOpen())
+//    {
+//        if(!file.open(QIODevice::WriteOnly))
+//        {
+//            qDebug () << "slotContinueDownloading: file don't open.";
+//        }
+//    }
+    time.start();
+    sendMsg(currentSocketType, MsgType::ContinueDownloading, {fileName, lastRecivedOffset, blockSize});
+}
 //void MyClient::slotListLastCommandsStepUp()
 //{
 //    if(listLastComands.empty())
@@ -505,13 +630,3 @@ void MyClient::slotAlive()
 //    if(cur_command != listLastComands.size() - 1)
 //        cur_command++;
 //}
-void MyClient::slotToogleProt()
-{
-    if(currentSocketType == SocketType::TCP){
-        bProtToogle->setText("UDP");
-        currentSocketType = SocketType::UDP;
-    } else {
-        bProtToogle->setText("TCP");
-        currentSocketType = SocketType::TCP;
-    }
-}

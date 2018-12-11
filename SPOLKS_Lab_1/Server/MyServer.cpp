@@ -4,7 +4,6 @@
 #include "MyServer.h"
 
 MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
-                                                    , nextBlockSize(0)
 {
     pTcpServer = new QTcpServer(this);
     connect(pTcpServer, SIGNAL(newConnection()), this, SLOT(slotNewConnection()));
@@ -48,8 +47,10 @@ MyServer::MyServer(QWidget* pwgt /*=0*/) : QWidget(pwgt)
     aliveTimer = new QTimer();
     aliveTimer->setInterval(1777);
     sendingTimer = new QTimer();
+    sendLostTimer = new QTimer();
     connect(aliveTimer, SIGNAL(timeout()), this, SLOT(slotAlive()));
     connect(sendingTimer, SIGNAL(timeout()), this, SLOT(slotSendData()));
+    connect(sendLostTimer, SIGNAL(timeout()), this, SLOT(slotSendLost()));
 }
 void MyServer::slotNewConnection()
 {
@@ -126,6 +127,9 @@ void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
         case MsgType::Msg :
             out << qint8(MsgType::Msg) << args.first().toString();
             break;
+        case MsgType::DownloadFin :
+            out << qint8(MsgType::DownloadFin);
+            break;
         case MsgType::DataAnonce :
             buffer.clear();
             file.setFileName(args.first().toString());
@@ -144,12 +148,12 @@ void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
                 qint64 offset = args.at(0).toLongLong();
                 qint64 size = args.at(1).toLongLong();
                 qint64 blockSize = baseBlockSize;
-                qint64 blockNumber = 0;
-                acks.clear();
-                acks.resize(size / baseBlockSize + 1);
-                while(offset < size )
+                qint64 blockNumber = (args.size() == 3) ? args.at(2).toLongLong() : 0;
+                // qDebug() << "blockNumber = " << blockNumber << "args.size() = " << args.size();
+                qint64 end = qMin(offset + size, (qint64)buffer.size());
+                while(offset < end)
                 {
-                    blockSize = (size - offset > blockSize) ? blockSize : (size - offset);
+                    blockSize = (end - offset > blockSize) ? blockSize : (end - offset);
                     QByteArray  arrBlock;
                     QDataStream out(&arrBlock, QIODevice::WriteOnly);
                     out.setVersion(QDataStream::Qt_5_9);
@@ -167,7 +171,7 @@ void MyServer::sendMsg(SocketType socketType, MsgType type, QList<QVariant> args
                     }
                     offset += baseBlockSize;
                 }
-                pTcpSocket->flush();
+                // pTcpSocket->flush();
                 return;
             }
             break;
@@ -265,47 +269,6 @@ void MyServer::slotReadUdpSocket()
         processRecivedData(SocketType::UDP, in);
     }
 }
-void MyServer::slotSendData()
-{
-    // qDebug () << "slotSendData()";
-    sendingTimer->stop();
-    if(ackCounter > 0) {
-        boost = false;
-        windowSize = windowSize >> 1;
-        // windowSize = windowSize - ackCounter;
-    } else if (boost)
-        windowSize = windowSize << 1;
-    else
-        windowSize += 1;
-//    qDebug () << "windowSize = " << windowSize;
-    QBuffer buffStream(&buffer);
-    buffStream.open(QIODevice::ReadOnly);
-    qint64 blockSize = baseBlockSize;
-    int i = windowSize;
-    ackCounter = windowSize;
-    while(offset < dataSize && i-- > 0)
-    {
-//        qDebug () << "send block";
-        blockSize = (dataSize - offset > blockSize) ? blockSize : (dataSize - offset);
-        QByteArray  arrBlock;
-        QDataStream out(&arrBlock, QIODevice::WriteOnly);
-        out.setVersion(QDataStream::Qt_5_9);
-        out << quint16(0);
-        out << qint8(MsgType::Data) << offset << blockSize << blockNumber;
-
-        buffStream.seek(offset);
-        out << buffStream.read(blockSize);
-        out.device()->seek(0);
-        out << quint16(arrBlock.size() - sizeof(quint16));
-        pUdpSocket->writeDatagram(arrBlock, udpSenderAddress, udpSenderPort);
-//                    qDebug() << "offset = " << offset << ", blockSize = " << blockSize;
-        pUdpSocket->waitForBytesWritten();
-        acks[blockNumber] = 1;
-        blockNumber++;
-        offset += baseBlockSize;
-    }
-    sendingTimer->start(1);
-}
 void MyServer::processRecivedData(SocketType soketType, QDataStream &in)
 {
     QString s;
@@ -357,16 +320,39 @@ void MyServer::processRecivedData(SocketType soketType, QDataStream &in)
                 sendMsg(soketType, MsgType::Msg, {"File don't exist."});
             }
             break;
+         case MsgType::ContinueDownloading :
+           {
+//        qDebug () << "ContinueDownloading";
+                QString recivedFileName;
+                in >> recivedFileName;
+                if(recivedFileName != fileName) {
+                    sendMsg(soketType, MsgType::Msg, {"Cannot continue downloading."});
+                    break;
+                }
+                in >> offset >> blockSize;
+                int blockNumber = offset/blockSize;
+                for(int i = blockNumber; i < acks.size(); i++)
+                    acks[i] = 0;
+//                if(ackPartLast > blockNumber)
+//                    ackPartLast = blockNumber;
+                ackPartLast = 0;
+                windowSize = 8;
+                attemptCounter = 0;
+                sendingTimer->start(1);
+           }
+            break;
          case MsgType::DataRequest :
             {
 //               qDebug () << "Reciver DataRequest" << endl;
                rrt_time = time.elapsed();
-               qDebug () << "rrt_time = " << rrt_time << "msec";
+               // qDebug () << "rrt_time = " << rrt_time << "msec";
                in >> fileName >> offset >> dataSize >> baseBlockSize;
                if(soketType == SocketType::UDP){
                   blockNumber = 0;
+                  ackPartLast = 0;
                   acks.clear();
                   acks.resize(dataSize / baseBlockSize + 1);
+                  acks.fill(0);
                   slotSendData();
              }
                else
@@ -379,10 +365,12 @@ void MyServer::processRecivedData(SocketType soketType, QDataStream &in)
                 in >> blockNumber;
                 acks[blockNumber] = 0;
                 ackCounter--;
+                attemptCounter = 0;
 //                qDebug () << "DataAck: blockNumber = " << blockNumber << "ackCounter" << ackCounter;
             }
             break;
          case MsgType::DownloadAck :
+            sendLostTimer->stop();
             fileName.clear();
             buffer.clear();
             break;
@@ -393,6 +381,76 @@ void MyServer::processRecivedData(SocketType soketType, QDataStream &in)
             aliveCounter = 0;
             break;
         // default:
+    }
+}
+void MyServer::slotSendData()
+{
+//    qDebug () << "slotSendData()";
+    sendingTimer->stop();
+    if(attemptCounter++ == 100)
+        return;
+    if(ackCounter > 0) {
+        boost = false;
+        windowSize = windowSize >> 1;
+        // windowSize = windowSize - ackCounter;
+    } else if (boost)
+        windowSize = windowSize << 1;
+    else
+        windowSize += 1;
+//    qDebug () << "windowSize = " << windowSize;
+    QBuffer buffStream(&buffer);
+    buffStream.open(QIODevice::ReadOnly);
+    qint64 blockSize = baseBlockSize;
+    int i = windowSize;
+
+    while(offset < dataSize && i-- > 0)
+    {
+        ackCounter = windowSize;
+        blockSize = (dataSize - offset > blockSize) ? blockSize : (dataSize - offset);
+        QByteArray  arrBlock;
+        QDataStream out(&arrBlock, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_5_9);
+        out << quint16(0);
+        out << qint8(MsgType::Data) << offset << blockSize << blockNumber;
+
+        buffStream.seek(offset);
+        out << buffStream.read(blockSize);
+        out.device()->seek(0);
+        out << quint16(arrBlock.size() - sizeof(quint16));
+        pUdpSocket->writeDatagram(arrBlock, udpSenderAddress, udpSenderPort);
+//                    qDebug() << "offset = " << offset << ", blockSize = " << blockSize;
+        pUdpSocket->waitForBytesWritten();
+        acks[blockNumber] = 1;
+        blockNumber++;
+        offset += baseBlockSize;
+    }
+    if(offset < dataSize) {
+        sendingTimer->start(1);
+    }
+    else {
+        sendingTimer->stop();
+        slotSendLost();
+    }
+}
+void MyServer::slotSendLost()
+{
+//    qDebug () << "slotSendLost()";
+    sendLostTimer->stop();
+    if(attemptCounter++ == 100)
+        return;
+    while(ackPartLast < blockNumber) {
+        if(acks[ackPartLast] > 0)
+            break;
+        ackPartLast++;
+    }
+    if(ackPartLast < blockNumber){
+        qint64 offset = ackPartLast * baseBlockSize;
+        sendMsg(SocketType::UDP, MsgType::Data, {offset, baseBlockSize, ackPartLast});
+//        qDebug () << "send lost parts: offset = " << offset << "baseBlockSize = " << baseBlockSize << "ackPartLast" << ackPartLast;
+        sendLostTimer->start(1);
+    } else {
+        sendMsg(SocketType::UDP, MsgType::DownloadFin);
+        sendLostTimer->start(1);
     }
 }
 void MyServer::slotConnectionStateChanged(QAbstractSocket::SocketState state)
