@@ -38,6 +38,7 @@ private:
     int port = 45454;
     QHostAddress groupAddress;
     QHostAddress myAddress;
+    QNetworkInterface groupInterface;
 
 public slots:
     void slotBindResume();
