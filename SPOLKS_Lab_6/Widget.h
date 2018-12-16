@@ -6,6 +6,8 @@
 #include <QNetworkDatagram>
 #include <QStringListModel>
 #include <QDebug>
+#include <QNetworkInterface>
+#include <QList>
 
 namespace Ui {
 class Widget;
@@ -17,6 +19,7 @@ class Widget : public QWidget
 
     enum MsgType {
         Hello,
+        HelloAck,
         Leave,
         Msg
     };
@@ -29,16 +32,20 @@ private:
     Ui::Widget *ui;
     QUdpSocket *pUdpSocket;
     bool isJoined = false;
+    bool isBind   = false;
     QStringListModel model;
     QStringList      slMembers;
     int port = 45454;
     QHostAddress groupAddress;
+    QHostAddress myAddress;
 
 public slots:
+    void slotBindResume();
     void slotJoinLeaveGroup();
     void slotReadUdpSocket();
     void processRecivedData(QNetworkDatagram &datagram);
     void sendMsg(MsgType type, QList<QVariant> args = QList<QVariant>());
+    void slotParseInput();
 };
 
 #endif // WIDGET_H
