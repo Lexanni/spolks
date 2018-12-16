@@ -38,7 +38,7 @@ public slots:
     void slotJoinLeaveGroup();
     void slotReadUdpSocket();
     void processRecivedData(QNetworkDatagram &datagram);
-    void sendMsg(MsgType type, QList<QVariant> args);
+    void sendMsg(MsgType type, QList<QVariant> args = QList<QVariant>());
 };
 
 #endif // WIDGET_H

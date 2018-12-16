@@ -33,3 +33,7 @@ build-*
 #QtCtreator Qml
 *.qmlproject.user
 *.qmlproject.user.*
+
+*.exe
+*.zip
+*.rar

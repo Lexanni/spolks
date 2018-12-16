@@ -27,9 +27,11 @@ void Widget::slotJoinLeaveGroup()
     if(!isJoined) {
         groupAddress = QHostAddress(ui->cbMulticastGroup->currentText());
         pUdpSocket->joinMulticastGroup(groupAddress);
+        sendMsg(MsgType::Hello);
         ui->pbJoinLeave->setText("Leave");
         isJoined = true;
     } else {
+        sendMsg(MsgType::Leave);
         pUdpSocket->leaveMulticastGroup(groupAddress);
         ui->pbJoinLeave->setText("Join");
         isJoined = false;

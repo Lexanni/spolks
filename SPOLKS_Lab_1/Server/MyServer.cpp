@@ -387,7 +387,7 @@ void MyServer::slotSendData()
 {
 //    qDebug () << "slotSendData()";
     sendingTimer->stop();
-    if(attemptCounter++ == 100)
+    if(attemptCounter++ == 200)
         return;
     if(ackCounter > 0) {
         boost = false;
@@ -436,7 +436,7 @@ void MyServer::slotSendLost()
 {
 //    qDebug () << "slotSendLost()";
     sendLostTimer->stop();
-    if(attemptCounter++ == 100)
+    if(attemptCounter++ == 200)
         return;
     while(ackPartLast < blockNumber) {
         if(acks[ackPartLast] > 0)
