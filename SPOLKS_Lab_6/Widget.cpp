@@ -31,7 +31,7 @@ void Widget::slotBindResume()
     if(!isBind) {
         myAddress = QHostAddress(ui->cbInterfaces->currentText());
         pUdpSocket = new QUdpSocket;
-        pUdpSocket->bind(myAddress, port, QUdpSocket::ShareAddress);
+        pUdpSocket->bind(QHostAddress::AnyIPv4, port, QUdpSocket::ShareAddress);
         connect(pUdpSocket, SIGNAL(readyRead()), this, SLOT(slotReadUdpSocket()));
         isBind = true;
         ui->pbBindResume->setText("Resume");
