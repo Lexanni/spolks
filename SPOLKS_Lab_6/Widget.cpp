@@ -19,6 +19,8 @@ Widget::Widget(QWidget *parent) :
     connect(ui->pbBindResume, SIGNAL(clicked()), this, SLOT(slotBindResume()));
     connect(ui->pbJoinLeave, SIGNAL(clicked()), this, SLOT(slotJoinLeaveGroup()));
     connect(ui->leInput, SIGNAL(returnPressed()), this, SLOT(slotParseInput()));
+    connect(ui->lvMembers, SIGNAL(clicked(QModelIndex)), this, SLOT(slotToogleIgnore(QModelIndex)));
+    connect(ui->pbMulticastBroadcast, SIGNAL(clicked()), this, SLOT(slotMulticastBroadcast()));
 }
 
 Widget::~Widget()
@@ -69,6 +71,7 @@ void Widget::slotJoinLeaveGroup()
         ui->leInput->setEnabled(true);
         slMembers.clear();
         model.setStringList(slMembers);
+        ignoreList.clear();
     }
 }
 
@@ -113,7 +116,8 @@ void Widget::processRecivedData(QNetworkDatagram &datagram)
             break;
         case MsgType::Msg :
             in >> s;
-            ui->teChat->append(senderSocket + ":" + s);
+            if(!ignoreList.contains(senderSocket))
+                ui->teChat->append(senderSocket + " > " + s);
             break;
         case MsgType::Leave :
             slMembers.removeAll(senderSocket);
@@ -142,11 +146,56 @@ void Widget::sendMsg(MsgType type, QList<QVariant> args)
         default:
             qDebug () << "Unknown MsgType!";
     }
-    pUdpSocket->writeDatagram(arrBlock, groupAddress, port);
+    if(isBroadcast){
+        pUdpSocket->writeDatagram(arrBlock, QHostAddress::Broadcast, port);
+    } else {
+        pUdpSocket->writeDatagram(arrBlock, groupAddress, port);
+    }
 }
 
 void Widget::slotParseInput()
 {
     sendMsg(MsgType::Msg, {ui->leInput->text()});
     ui->leInput->clear();
+}
+
+void Widget::slotToogleIgnore(QModelIndex idx)
+{
+    QString postfix = " (ignore)";
+    QString s = idx.data().toString();
+    int i = idx.row();
+
+    if(s.contains(postfix)) {
+        s = s.left(s.size() - postfix.size());
+        ignoreList.removeAll(s);
+        slMembers.replace(i, s);
+    } else {
+        ignoreList.append(s);
+        slMembers.replace(i, s + postfix);
+    }
+    model.setStringList(slMembers);
+}
+
+void Widget::slotMulticastBroadcast()
+{
+    if(!isBroadcast) {
+        if(isJoined)
+            slotJoinLeaveGroup();
+        isBroadcast = true;
+        ui->pbMulticastBroadcast->setText("Broadcast");
+        ui->leInput->setEnabled(true);
+        ui->cbMulticastGroup->setEnabled(false);
+        ui->pbJoinLeave->setEnabled(false);
+        sendMsg(MsgType::Hello);
+    } else {
+        isBroadcast = false;
+        ui->pbMulticastBroadcast->setText("Multicast");
+        ui->leInput->setEnabled(false);
+        ui->cbMulticastGroup->setEnabled(true);
+        ui->pbJoinLeave->setEnabled(true);
+        sendMsg(MsgType::Leave);
+        slMembers.clear();
+        model.setStringList(slMembers);
+        ignoreList.clear();
+    }
 }

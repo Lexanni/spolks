@@ -8,6 +8,7 @@
 #include <QDebug>
 #include <QNetworkInterface>
 #include <QList>
+#include <QTime>
 
 namespace Ui {
 class Widget;
@@ -33,12 +34,14 @@ private:
     QUdpSocket *pUdpSocket;
     bool isJoined = false;
     bool isBind   = false;
+    bool isBroadcast = false;
     QStringListModel model;
     QStringList      slMembers;
     int port = 45454;
     QHostAddress groupAddress;
     QHostAddress myAddress;
     QNetworkInterface groupInterface;
+    QList<QString> ignoreList;
 
 public slots:
     void slotBindResume();
@@ -47,6 +50,8 @@ public slots:
     void processRecivedData(QNetworkDatagram &datagram);
     void sendMsg(MsgType type, QList<QVariant> args = QList<QVariant>());
     void slotParseInput();
+    void slotToogleIgnore(QModelIndex idx);
+    void slotMulticastBroadcast();
 };
 
 #endif // WIDGET_H
