@@ -51,8 +51,9 @@ void Widget::slotJoinLeaveGroup()
 {
     if(!isJoined) {
         groupAddress = QHostAddress(ui->cbMulticastGroup->currentText());
-        groupInterface = QNetworkInterface::interfaceFromIndex(ui->cbInterfaces->currentIndex());
-        pUdpSocket->joinMulticastGroup(groupAddress, groupInterface);
+//        groupInterface = QNetworkInterface::interfaceFromIndex(ui->cbInterfaces->currentIndex());
+//        pUdpSocket->joinMulticastGroup(groupAddress, groupInterface);
+        pUdpSocket->joinMulticastGroup(groupAddress);
         sendMsg(MsgType::Hello);
         ui->pbJoinLeave->setText("Leave");
         isJoined = true;
@@ -60,7 +61,8 @@ void Widget::slotJoinLeaveGroup()
         ui->leInput->setEnabled(true);
     } else {
         sendMsg(MsgType::Leave);
-        pUdpSocket->leaveMulticastGroup(groupAddress, groupInterface);
+//        pUdpSocket->leaveMulticastGroup(groupAddress, groupInterface);
+        pUdpSocket->leaveMulticastGroup(groupAddress);
         ui->pbJoinLeave->setText("Join");
         isJoined = false;
         ui->cbMulticastGroup->setEnabled(true);
