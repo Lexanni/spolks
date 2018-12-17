@@ -31,7 +31,7 @@ void Widget::slotBindResume()
     if(!isBind) {
         myAddress = QHostAddress(ui->cbInterfaces->currentText());
         pUdpSocket = new QUdpSocket;
-        pUdpSocket->bind(QHostAddress::AnyIPv4, port, QUdpSocket::ShareAddress);
+        pUdpSocket->bind(myAddress, port, QUdpSocket::ShareAddress);
         connect(pUdpSocket, SIGNAL(readyRead()), this, SLOT(slotReadUdpSocket()));
         isBind = true;
         ui->pbBindResume->setText("Resume");
@@ -100,8 +100,8 @@ void Widget::processRecivedData(QNetworkDatagram &datagram)
             QDataStream out(&ba, QIODevice::WriteOnly);
             out.setVersion(QDataStream::Qt_5_9);
             out << qint8(MsgType::HelloAck);
-            datagram.makeReply(ba);
-            pUdpSocket->writeDatagram(datagram);
+            // datagram.makeReply(ba);
+            pUdpSocket->writeDatagram(ba, udpSenderAddress, udpSenderPort);
         }
         case MsgType::HelloAck :
             if(!slMembers.contains(senderSocket)) {
