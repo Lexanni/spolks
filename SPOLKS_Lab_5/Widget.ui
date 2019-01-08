@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>442</width>
+    <width>566</width>
     <height>362</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Widget</string>
+   <string>ping / traceroute</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -27,6 +27,9 @@
          <verstretch>0</verstretch>
         </sizepolicy>
        </property>
+       <property name="editable">
+        <bool>true</bool>
+       </property>
       </widget>
      </item>
      <item>
@@ -37,9 +40,9 @@
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="pushButton_2">
+      <widget class="QPushButton" name="pbTraceroute">
        <property name="text">
-        <string>Smurf</string>
+        <string>Traceroute</string>
        </property>
       </widget>
      </item>
@@ -48,19 +51,22 @@
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_5">
      <item>
-      <widget class="QComboBox" name="comboBox">
+      <widget class="QComboBox" name="cbVictimAddress">
        <property name="sizePolicy">
         <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
        </property>
+       <property name="editable">
+        <bool>true</bool>
+       </property>
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="pbTraceroute">
+      <widget class="QPushButton" name="pbSmurf">
        <property name="text">
-        <string>Traceroute</string>
+        <string>Smurf</string>
        </property>
       </widget>
      </item>

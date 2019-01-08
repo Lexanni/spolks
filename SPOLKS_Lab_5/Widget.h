@@ -12,6 +12,7 @@
 void multithreadPing(QString ip_address);
 QString getErrorDescription(DWORD);
 static QString resultString;
+static int threadCounter = 0;
 
 namespace Ui {
 class Widget;
@@ -27,10 +28,11 @@ public:
 
 private:
     Ui::Widget *ui;
-    QMutex mux;
+
 public slots:
     void on_pbPing_clicked();
     void on_pbTraceroute_clicked();
+    void on_pbSmurf_clicked();
 //    void multithreadPing(QString);
 };
 

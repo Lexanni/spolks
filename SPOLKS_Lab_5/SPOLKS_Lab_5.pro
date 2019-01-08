@@ -10,8 +10,7 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 TARGET = SPOLKS_Lab_5
 TEMPLATE = app
-LIBS     += -lws2_32
-LIBS     += -liphlpapi
+LIBS     += -lws2_32 -liphlpapi
 
 # The following define makes your compiler emit warnings if you use
 # any feature of Qt which as been marked as deprecated (the exact warnings
