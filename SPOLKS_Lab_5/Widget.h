@@ -27,9 +27,10 @@ public:
 
 private:
     Ui::Widget *ui;
-
+    QMutex mux;
 public slots:
     void on_pbPing_clicked();
+    void on_pbTraceroute_clicked();
 //    void multithreadPing(QString);
 };
 
